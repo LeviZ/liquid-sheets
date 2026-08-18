@@ -19,7 +19,11 @@ The availability prior ships as a committed artifact (`app/prior_2026.js`), the 
 
 ## Working method
 
-Same as the original build: iterative, screenshot-driven refinement with Levi's eyes on the UI at every milestone. Design polish concentrates in M3/M4 (porting the predecessor's token architecture); M1/M2 are function-first. Every JS change gets `node --check`; every text artifact gets the non-ASCII/dash grep.
+Same as the original build: iterative, screenshot-driven refinement with Levi's eyes on the UI at every milestone. Design polish concentrates in M3/M4; M1/M2 are function-first. Every JS change gets `node --check`; every text artifact gets the non-ASCII/dash grep.
+
+Course correction (2026-08-18, Levi): the app should LOOK like the predecessor, not merely rhyme with it. When building or fixing UI, port the actual patterns (layout, spacing, tokens, component shapes) from `levi-sheet/draftroom/app.html` rather than redesigning from memory. The infrastructure is new; the look is inherited.
+
+Dev server: `./dev.sh`, which serves the repo root on the dedicated port 8013 (http://localhost:8013/app/). Port 8000 belongs to other projects on this machine.
 
 ## Exit gate (from master plan)
 

@@ -719,21 +719,20 @@ function buildCols(run, soldMap, marketValues, scale) {
       const p = group[i];
       const rank = i + 1;
       if (rank === baseRank + 1) {
-        const below = group.length - baseRank;
-        const b = el("div", "baserow click");
+        const b = el("div", "baserow");
         b.appendChild(el("span", "darr"));
-        b.appendChild(el("span", null,
-          freeExpanded[pos] ? "FREE" : `FREE +${below}`));
+        b.appendChild(el("span", null, "FREE"));
         b.appendChild(el("span", "darr"));
         b.dataset.tip = "Replacement level: everyone below this line " +
-          "should cost $1. Value is measured as points above it. " +
-          (freeExpanded[pos] ? "Click to collapse." : "Click to expand.");
-        b.onclick = () => {
-          freeExpanded[pos] = !freeExpanded[pos];
-          renderBoard();
-        };
+          "should cost $1. Value is measured as points above it.";
         table.appendChild(b);
-        if (!freeExpanded[pos]) break;
+        if (!freeExpanded[pos]) {
+          const more = el("div", "morerow",
+            `+${group.length - baseRank} more..`);
+          more.onclick = () => { freeExpanded[pos] = true; renderBoard(); };
+          table.appendChild(more);
+          break;
+        }
       }
       if (i > 0 && p.tier !== group[i - 1].tier && rank <= baseRank) {
         table.appendChild(el("div", "cutrow", `TIER ${p.tier}`));
@@ -758,6 +757,11 @@ function buildCols(run, soldMap, marketValues, scale) {
       if (sale) decorateSold(row, p, sale);
       if (p.player_id === stagedPid) row.classList.add("staged");
       table.appendChild(row);
+    }
+    if (freeExpanded[pos] && group.length > baseRank) {
+      const less = el("div", "morerow", "show less");
+      less.onclick = () => { freeExpanded[pos] = false; renderBoard(); };
+      table.appendChild(less);
     }
     col.appendChild(table);
     cols.appendChild(col);

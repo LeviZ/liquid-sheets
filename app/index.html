@@ -87,7 +87,10 @@ textarea { width: 100%; font: inherit; padding: 8px;
 .topbar .spacer { flex: 1; }
 .chip { background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: 3px 10px; font-size: 12px; color: var(--dim); }
-.cols { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+/* minmax(0, 1fr): without the explicit 0 minimum, grid tracks refuse to
+ * shrink below their content and the whole board overflows under the rail. */
+.cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px; }
 .col h3 { font-size: 13px; letter-spacing: 1px; margin-bottom: 6px;
   padding: 4px 8px; border-radius: 5px; color: #fff; }
 .pos-qb { background: var(--pos-qb); } .pos-rb { background: var(--pos-rb); }
@@ -131,8 +134,9 @@ textarea { width: 100%; font: inherit; padding: 8px;
 .cutrow::before, .cutrow::after, .baserow::before, .baserow::after {
   content: ""; flex: 1; border-top: 2px solid var(--ink); opacity: 0.3; }
 .baserow { font-weight: bold; color: var(--ink); padding: 3px 8px; }
-.baserow.click { cursor: pointer; user-select: none; }
-.baserow.click:hover { background: rgba(0, 0, 0, 0.05); }
+.morerow { padding: 4px 8px; font-size: 12px; color: var(--dim);
+  cursor: pointer; text-align: center; user-select: none; }
+.morerow:hover { background: rgba(0, 0, 0, 0.05); color: var(--ink); }
 .baserow::before, .baserow::after { border-top: 3px solid var(--ink);
   opacity: 0.55; }
 .darr { width: 0; height: 0; border-left: 4px solid transparent;
@@ -214,7 +218,7 @@ textarea { width: 100%; font: inherit; padding: 8px;
     <h1>Liquid Sheets</h1>
     <div id="spendline" class="sub" hidden></div>
   </div>
-  <span class="ver">V9 (M3)</span>
+  <span class="ver">V10 (M3)</span>
   <span class="right gearwrap">
     <button id="gearbtn" class="ghost" aria-label="Menu">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
