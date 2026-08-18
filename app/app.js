@@ -147,25 +147,26 @@ function stepScoring(body, nav) {
     row.appendChild(b);
   }
   body.appendChild(row);
-  const det = el("details");
-  det.appendChild(el("summary", null, "Adjust the knobs the engine scores with"));
-  const grid = el("div", "grid4");
+  body.appendChild(el("p", "hint",
+    "These are the exact numbers the engine scores with. The preset fills " +
+    "them in; edit any of them to match your league."));
+  const form = el("div", "form");
   const knobDefs = [
-    ["pass_yd", "Pts per passing yard"], ["pass_td", "Passing TD"],
-    ["int", "Interception"], ["rush_rec_yd", "Pts per rush/rec yard"],
+    ["pass_yd", "Points per passing yard"], ["pass_td", "Passing TD"],
+    ["int", "Interception"], ["rush_rec_yd", "Points per rush/rec yard"],
     ["rush_rec_td", "Rush/rec TD"], ["fumble_lost", "Fumble lost"],
     ["two_pt", "Two-point conversion"],
   ];
   for (const [k, label] of knobDefs) {
-    const wrap = el("label", "field");
-    wrap.appendChild(el("span", null, label));
+    const r = el("label", "formrow");
+    r.appendChild(el("span", null, label));
     const inp = el("input");
     inp.type = "number"; inp.step = "0.01"; inp.value = wizardState.knobs[k];
     inp.onchange = () => { wizardState.knobs[k] = Number(inp.value); };
-    grid.appendChild(wrap); wrap.appendChild(inp);
+    r.appendChild(inp);
+    form.appendChild(r);
   }
-  det.appendChild(grid);
-  body.appendChild(det);
+  body.appendChild(form);
   navButtons(nav, { onNext: () => { wizardState.step = 4; renderWizard(); } });
 }
 
@@ -196,9 +197,8 @@ function stepTeams(body, nav) {
 function stepData(body, nav) {
   body.appendChild(el("h2", null, "Projections"));
   body.appendChild(el("p", "hint",
-    "One click fetches season projections from Sleeper's public API, " +
-    "straight from your browser. Your league data never leaves this device. " +
-    "More sources (paste, CSV, rankings) can be added later."));
+    "One click fetches projections from Sleeper's public data, straight " +
+    "from your browser. You can add more sources later."));
   const btn = el("button", "primary big", "Fetch projections");
   const msg = el("p", "msg");
   btn.onclick = async () => {
@@ -248,8 +248,10 @@ async function finishWizard() {
 /* ---------------------------------------------------------------- runs */
 
 async function doFetchSleeper() {
-  const { as_of, players, names, meta } = await fetchSleeper(doc.league.season);
+  const { as_of, players, kdef, names, meta } =
+    await fetchSleeper(doc.league.season);
   doc.sources.sleeper = { as_of, players };
+  doc.kdef = { as_of, players: kdef };
   Object.assign(doc.names, names);
   Object.assign(doc.player_meta, meta);
   await makeRun();
@@ -289,12 +291,22 @@ function renderBoard() {
 
   const bar = el("div", "topbar");
   if (run) {
-    bar.appendChild(el("span", "chip",
-      `run ${run.run_id} (${run.source_label}) ${run.as_of}`));
-    bar.appendChild(el("span", "chip", `premium $${run.meta.premium}`));
-    bar.appendChild(el("span", "chip",
-      "baselines " + POSITIONS.map((p) => `${p}${run.meta.baselines[p]}`)
-        .join(" ")));
+    const chip = (text, tip) => {
+      const c = el("span", "chip", text);
+      c.dataset.tip = tip;
+      bar.appendChild(c);
+    };
+    chip(`run ${run.run_id} (${run.source_label}) ${run.as_of}`,
+      "Every dollar on this board traces to this numbered engine run: " +
+      "which projections it used and when they were fetched.");
+    chip(`premium $${run.meta.premium}`,
+      "The money that buys value: all league dollars minus $1 per roster " +
+      "spot, split among players by how far they sit above replacement.");
+    chip("baselines " + POSITIONS.map((p) => `${p}${run.meta.baselines[p]}`)
+      .join(" "),
+      "Replacement level per position: the positional rank where value " +
+      "reaches $1 (last starter plus a bench share). VBD measures points " +
+      "above this player.");
   }
   const spacer = el("span", "spacer");
   bar.appendChild(spacer);
@@ -335,11 +347,25 @@ function renderBoard() {
     return;
   }
 
+  const headerRow = (table) => {
+    const h = el("div", "row colhead");
+    h.appendChild(el("span", "nm", "Player"));
+    const pts = el("span", "pts", "Pts");
+    pts.dataset.tip = "Projected season points under YOUR scoring rules, " +
+      "after the injury-availability discount.";
+    h.appendChild(pts);
+    const usd = el("span", "usd", "Our $");
+    usd.dataset.tip = "Auction value: this player's share of the league's " +
+      "money, by points above the positional baseline.";
+    h.appendChild(usd);
+    table.appendChild(h);
+  };
   const cols = el("div", "cols");
   for (const pos of POSITIONS) {
     const col = el("div", "col");
     col.appendChild(el("h3", `pos-${pos.toLowerCase()}`, pos));
     const table = el("div", "rows");
+    headerRow(table);
     const group = run.players.filter((p) => p.pos === pos)
       .sort((a, b) => b.dollar - a.dollar).slice(0, 40);
     let lastTier = null;
@@ -353,6 +379,29 @@ function renderBoard() {
       row.appendChild(el("span", "pts", p.proj_pts.toFixed(0)));
       row.appendChild(el("span", "usd", `$${p.dollar.toFixed(0)}`));
       table.appendChild(row);
+    }
+    col.appendChild(table);
+    cols.appendChild(col);
+  }
+  if (doc.kdef && doc.kdef.players.length) {
+    const col = el("div", "col");
+    const h3 = el("h3", "pos-kdef", "K / DEF");
+    h3.dataset.tip = "Kickers and defenses are priced at $1 by design: " +
+      "their year-to-year value is too noisy to bid on.";
+    col.appendChild(h3);
+    const table = el("div", "rows");
+    for (const sub of ["K", "DEF"]) {
+      table.appendChild(el("div", "row subhead", sub === "K"
+        ? "Kickers" : "Defenses"));
+      for (const p of doc.kdef.players.filter((x) => x.pos === sub)
+        .slice(0, 14)) {
+        const row = el("div", "row");
+        row.appendChild(el("span", "nm",
+          doc.names[p.player_id] ?? p.player_id));
+        row.appendChild(el("span", "pts", p.pts.toFixed(0)));
+        row.appendChild(el("span", "usd", "$1"));
+        table.appendChild(row);
+      }
     }
     col.appendChild(table);
     cols.appendChild(col);

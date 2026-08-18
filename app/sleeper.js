@@ -4,6 +4,7 @@
  * user's own rules, so Sleeper's default-scoring points are never used. */
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
+const KDEF = ["K", "DEF"];
 
 const STAT_MAP = {
   pass_yd: "pass_yds", pass_td: "pass_tds", pass_int: "ints",
@@ -14,24 +15,33 @@ const STAT_MAP = {
 };
 
 export function sleeperUrl(season) {
-  const pos = POSITIONS.map((p) => `position[]=${p}`).join("&");
+  const pos = [...POSITIONS, ...KDEF].map((p) => `position[]=${p}`).join("&");
   return `https://api.sleeper.com/projections/nfl/${season}` +
     `?season_type=regular&${pos}&order_by=adp_half_ppr`;
 }
 
-/* Returns {as_of, players, names, meta}; players match the engine's input
- * shape. Throws on network failure; the caller owns the offline message. */
+/* Returns {as_of, players, kdef, names, meta}. players (QB/RB/WR/TE stat
+ * lines) match the engine's input shape; kdef (kickers, defenses) are listed
+ * separately because the model prices them at $1 by design. Throws on
+ * network failure; the caller owns the offline message. */
 export async function fetchSleeper(season) {
   const resp = await fetch(sleeperUrl(season));
   if (!resp.ok) throw new Error(`Sleeper responded ${resp.status}`);
   const items = await resp.json();
-  const players = [], names = {}, meta = {};
+  const players = [], kdef = [], names = {}, meta = {};
   for (const it of items) {
     const pl = it.player ?? {};
     const stats = it.stats ?? {};
     const pos = pl.position;
-    if (!POSITIONS.includes(pos) || !stats.pts_half_ppr) continue;
+    if (!stats.pts_half_ppr) continue;
     const pid = `sl:${it.player_id}`;
+    if (KDEF.includes(pos)) {
+      kdef.push({ player_id: pid, pos, team: it.team ?? null,
+        pts: stats.pts_half_ppr });
+      names[pid] = `${pl.first_name ?? ""} ${pl.last_name ?? ""}`.trim();
+      continue;
+    }
+    if (!POSITIONS.includes(pos)) continue;
     const line = {};
     for (const [theirs, ours] of Object.entries(STAT_MAP)) {
       if (stats[theirs] !== undefined && stats[theirs] !== null) {
@@ -49,5 +59,7 @@ export async function fetchSleeper(season) {
       is_rookie: pl.years_exp === 0,
     };
   }
-  return { as_of: new Date().toISOString().slice(0, 10), players, names, meta };
+  kdef.sort((a, b) => b.pts - a.pts);
+  return { as_of: new Date().toISOString().slice(0, 10),
+    players, kdef, names, meta };
 }
