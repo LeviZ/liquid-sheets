@@ -140,6 +140,61 @@ textarea { width: 100%; font: inherit; padding: 8px;
   opacity: 0.7; }
 .empty { text-align: center; margin-top: 10vh; color: var(--dim); }
 .empty button { margin-top: 14px; }
+.layout { display: flex; gap: 16px; align-items: flex-start; }
+.boardcol { flex: 1; min-width: 0; }
+.rail { width: 272px; flex-shrink: 0; display: flex; flex-direction: column;
+  gap: 14px; position: sticky; top: 12px; }
+.panelbox { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px; }
+.panelbox h4 { font-size: 11px; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--dim); margin-bottom: 8px; }
+.panelbox input, .panelbox select { font: inherit; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 6px; color: var(--ink);
+  width: 100%; background: var(--panel); }
+.qres { display: flex; flex-direction: column; margin-top: 4px; }
+.qitem { border: none; background: none; text-align: left; padding: 5px 6px;
+  border-radius: 5px; font-size: 13px; }
+.qitem:hover { background: var(--bg); }
+.stagecard { margin-top: 10px; border-top: 1px solid var(--line);
+  padding-top: 10px; }
+.stagetop { display: flex; align-items: center; gap: 8px; }
+.stagepos { font-size: 11px; font-weight: bold; color: #fff;
+  padding: 2px 7px; border-radius: 4px; }
+.stagename { font-weight: bold; flex: 1; }
+.tiny { font-size: 11px; padding: 3px 8px; }
+.verdict { font-size: 15px; font-weight: bold; letter-spacing: 1px;
+  margin-top: 10px; }
+.bidto { font-size: 24px; font-weight: bold; margin: 2px 0 6px;
+  cursor: help; }
+.badge { font-size: 12px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 10px; padding: 2px 9px;
+  display: inline-block; margin: 2px 4px 2px 0; }
+.badge.dim { color: var(--dim); }
+.saleform { display: grid; grid-template-columns: 64px 1fr auto; gap: 6px;
+  margin-top: 10px; }
+.saleform input, .saleform select { width: 100%; }
+.ledrow, .rostrow { display: flex; gap: 6px; padding: 3px 4px;
+  font-size: 13px; align-items: center; }
+.ledrow:nth-child(odd), .rostrow:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.03); }
+.ledrow.ledhead { font-size: 10px; text-transform: uppercase;
+  color: var(--dim); border-bottom: 1px solid var(--line); }
+.ledrow.me { font-weight: bold; }
+.lname { flex: 1; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.lname.click { cursor: pointer; }
+.lname.click:hover { text-decoration: underline; }
+.lnum { width: 44px; text-align: right; }
+.rostrow .lnum { width: auto; }
+.row.sold .nm { text-decoration: line-through; opacity: 0.6; }
+.row.sold { cursor: pointer; }
+@keyframes bidglow {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(212, 160, 23, 0.9); }
+  50% { box-shadow: inset 0 0 0 2px rgba(212, 160, 23, 0.25); }
+}
+.row.staged { animation: bidglow 1.6s ease-in-out infinite; }
+@media (max-width: 1100px) { .layout { flex-direction: column-reverse; }
+  .rail { width: 100%; position: static; } }
 [data-tip] { position: relative; cursor: help; }
 [data-tip]:hover::after {
   content: attr(data-tip);
@@ -159,7 +214,7 @@ textarea { width: 100%; font: inherit; padding: 8px;
     <h1>Liquid Sheets</h1>
     <div id="spendline" class="sub" hidden></div>
   </div>
-  <span class="ver">V8 (M2)</span>
+  <span class="ver">V9 (M3)</span>
   <span class="right gearwrap">
     <button id="gearbtn" class="ghost" aria-label="Menu">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>

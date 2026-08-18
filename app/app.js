@@ -5,6 +5,9 @@ import { blendProjections, valueBoard, scoreStatLine, POSITIONS }
   from "../engine/engine.js";
 import { KINDS, parsePaste, guessMapping, toEntries, matchEntries,
   rankImpliedStats, marketScale, detectKind } from "./importers.js";
+import { activeSales, appendSale, appendUnsale, ownerStates,
+  inflationFactor, theCall, totalRosterSpots as rosterSpots }
+  from "./draft.js";
 import { PRIOR, PRIOR_SEASON } from "./prior_2026.js";
 import { loadDoc, saveDoc, wipeDoc, newDoc, exportDoc, importDocFile }
   from "./storage.js";
@@ -556,31 +559,77 @@ async function finishImport() {
 
 /* --------------------------------------------------------------- board */
 
+let stagedPid = null;
+let rosterView = 0;
+
+function searchPool(run) {
+  const pool = run.players.map((p) => ({ pid: p.player_id, pos: p.pos,
+    dollar: p.dollar, name: doc.names[p.player_id] ?? p.player_id }));
+  if (doc.kdef) {
+    for (const p of doc.kdef.players) {
+      pool.push({ pid: p.player_id, pos: p.pos, dollar: 1,
+        name: doc.names[p.player_id] ?? p.player_id });
+    }
+  }
+  return pool;
+}
+
 function renderBoard() {
   const root = $("#main");
   root.innerHTML = "";
   const run = doc.runs[doc.runs.length - 1];
+  const sales = activeSales(doc.journal);
+  const soldMap = new Map(sales.map((s) => [s.pid, s]));
 
   const bar = el("div", "topbar");
   const spend = $("#spendline");
-  if (run) {
-    const c = el("span", "chip",
-      run.source_label === "blend"
-        ? `run ${run.run_id}: blend of ${run.as_of}`
-        : `run ${run.run_id}: ${run.as_of}`);
-    c.dataset.tip = "Every dollar on this board traces to this numbered " +
-      "engine run: which projections it used and when they were fetched. " +
-      "With more than one source, a run is their stat-by-stat blend.";
+  const chip = (text, tip) => {
+    const c = el("span", "chip", text);
+    if (tip) c.dataset.tip = tip;
     bar.appendChild(c);
+    return c;
+  };
+  if (run) {
+    chip(run.source_label === "blend"
+      ? `run ${run.run_id}: blend of ${run.as_of}`
+      : `run ${run.run_id}: ${run.as_of}`,
+    "Every dollar on this board traces to this numbered engine run: " +
+      "which projections it used and when they were fetched. With more " +
+      "than one source, a run is their stat-by-stat blend.");
     const total = doc.league.teams * doc.league.budget;
     spend.hidden = false;
     spend.textContent = `total board spend $${total}`;
     spend.dataset.tip = `All the money in your auction. $${run.meta.premium} ` +
       "of it buys value above the $1 floors; the rest is reserved as $1 " +
       "minimums across every roster spot.";
+    if (sales.length) {
+      const infl = inflationFactor(doc.league, run, sales);
+      chip(`inflation x${infl.toFixed(2)}`,
+        "Money left in the room versus board value left on it. Above 1.00 " +
+        "the room is money-rich and prices run hot; The Call already " +
+        "folds this in.");
+      const spots = rosterSpots(doc.league.full_roster);
+      chip(`sold ${sales.length}/${doc.league.teams * spots}`,
+        "Players drafted so far, out of every roster spot in the league.");
+      const last = sales[sales.length - 1];
+      chip(`last: ${last.name} $${last.price} ` +
+        `(${doc.league.team_names[last.owner] ?? "?"})`,
+      "The most recent recorded sale, read back from the journal.");
+    }
   } else {
     spend.hidden = true;
   }
+
+  let scale = null, marketValues = null;
+  if (run && doc.market && Object.keys(doc.market.values).length) {
+    marketValues = doc.market.values;
+    scale = marketScale(run.players, marketValues,
+      doc.league.teams * doc.league.model_params.dollar_slots_per_team);
+    chip(`market: ${doc.market.label}@${doc.market.as_of} x${scale.toFixed(2)}`,
+      "Pasted market prices, rescaled by this factor so their money " +
+      "supply matches your league's before comparing.");
+  }
+
   const spacer = el("span", "spacer");
   bar.appendChild(spacer);
   const add = el("button", "ghost", "Add Source");
@@ -590,7 +639,8 @@ function renderBoard() {
   reset.onclick = async () => {
     if (!confirm("Delete all local Liquid Sheets data? Export a backup first."))
       return;
-    await wipeDoc(); doc = null; wizardState.step = 0; renderWizard();
+    await wipeDoc(); doc = null; stagedPid = null;
+    wizardState.step = 0; renderWizard();
   };
   bar.appendChild(reset);
   root.appendChild(bar);
@@ -610,19 +660,32 @@ function renderBoard() {
     return;
   }
 
-  // Deal column exists only when market values were imported; absence
-  // removes the feature entirely (never zeros).
-  let scale = null, marketValues = null;
-  if (doc.market && Object.keys(doc.market.values).length) {
-    marketValues = doc.market.values;
-    scale = marketScale(run.players, marketValues,
-      doc.league.teams * doc.league.model_params.dollar_slots_per_team);
-    const c = el("span", "chip",
-      `market: ${doc.market.label}@${doc.market.as_of} x${scale.toFixed(2)}`);
-    c.dataset.tip = "Pasted market prices, rescaled by this factor so " +
-      "their money supply matches your league's before comparing.";
-    bar.insertBefore(c, bar.querySelector(".spacer"));
-  }
+  const layout = el("div", "layout");
+  layout.appendChild(buildCols(run, soldMap, marketValues, scale));
+  layout.appendChild(buildRail(run, sales, soldMap, marketValues, scale));
+  root.appendChild(layout);
+  if (stagedPid) $("#price")?.focus();
+}
+
+function decorateSold(row, p, sale) {
+  row.classList.add("sold");
+  const surplus = p.dollar - sale.price;
+  const a = Math.min(Math.abs(surplus) / 25, 0.4);
+  row.style.background = surplus >= 0
+    ? `rgba(29, 138, 83, ${a})` : `rgba(163, 59, 46, ${a})`;
+  row.dataset.tip = `${sale.name} to ` +
+    `${doc.league.team_names[sale.owner] ?? "?"} for $${sale.price}. ` +
+    "Click to undo this sale.";
+  row.onclick = async () => {
+    if (!confirm(`Undo the sale of ${sale.name} ($${sale.price})?`)) return;
+    appendUnsale(doc, sale.seq);
+    await saveDoc(doc);
+    renderBoard();
+  };
+}
+
+function buildCols(run, soldMap, marketValues, scale) {
+  const boardcol = el("div", "boardcol");
   const headerRow = (table) => {
     const h = el("div", "row colhead");
     h.appendChild(el("span", "nm", "Player"));
@@ -672,14 +735,14 @@ function renderBoard() {
         table.appendChild(b);
         if (!freeExpanded[pos]) break;
       }
-      // Tier cuts are gap-based; below the baseline everyone is $1 and
-      // the cuts would be noise, so they stop there.
       if (i > 0 && p.tier !== group[i - 1].tier && rank <= baseRank) {
         table.appendChild(el("div", "cutrow", `TIER ${p.tier}`));
       }
       const row = el("div", "row");
       row.appendChild(el("span", "nm", doc.names[p.player_id] ?? p.player_id));
-      row.appendChild(el("span", "pts", p.proj_pts.toFixed(0)));
+      const sale = soldMap.get(p.player_id);
+      row.appendChild(el("span", "pts",
+        sale ? `@${sale.price}` : p.proj_pts.toFixed(0)));
       row.appendChild(el("span", "usd", `$${p.dollar.toFixed(0)}`));
       if (marketValues) {
         const mv = marketValues[p.player_id];
@@ -692,6 +755,8 @@ function renderBoard() {
             `${d > 0 ? "+" : ""}${d.toFixed(0)}`));
         }
       }
+      if (sale) decorateSold(row, p, sale);
+      if (p.player_id === stagedPid) row.classList.add("staged");
       table.appendChild(row);
     }
     col.appendChild(table);
@@ -699,8 +764,7 @@ function renderBoard() {
   }
   if (doc.kdef && doc.kdef.players.length) {
     const col = el("div", "col");
-    const h3 = el("h3", "pos-kdef", "K / DEF");
-    col.appendChild(h3);
+    col.appendChild(el("h3", "pos-kdef", "K / DEF"));
     const table = el("div", "rows");
     for (const sub of ["K", "DEF"]) {
       table.appendChild(el("div", "row subhead", sub === "K"
@@ -710,15 +774,215 @@ function renderBoard() {
         const row = el("div", "row");
         row.appendChild(el("span", "nm",
           doc.names[p.player_id] ?? p.player_id));
-        row.appendChild(el("span", "pts", p.pts.toFixed(0)));
+        const sale = soldMap.get(p.player_id);
+        row.appendChild(el("span", "pts",
+          sale ? `@${sale.price}` : p.pts.toFixed(0)));
         row.appendChild(el("span", "usd", "$1"));
+        if (sale) decorateSold(row, { dollar: 1 }, sale);
+        if (p.player_id === stagedPid) row.classList.add("staged");
         table.appendChild(row);
       }
     }
     col.appendChild(table);
     cols.appendChild(col);
   }
-  root.appendChild(cols);
+  boardcol.appendChild(cols);
+  return boardcol;
+}
+
+function buildRail(run, sales, soldMap, marketValues, scale) {
+  const rail = el("div", "rail");
+
+  // ------------------------------------------------------------- sale box
+  const saleBox = el("div", "panelbox");
+  saleBox.appendChild(el("h4", null, "Nomination"));
+  const q = el("input");
+  q.id = "q"; q.placeholder = "/ Type a player name";
+  q.autocomplete = "off";
+  saleBox.appendChild(q);
+  const qres = el("div", "qres");
+  saleBox.appendChild(qres);
+  const pool = searchPool(run);
+  const runSearch = () => {
+    qres.innerHTML = "";
+    const term = q.value.trim().toLowerCase();
+    if (term.length < 2) return;
+    const hits = pool.filter((p) => !soldMap.has(p.pid) &&
+      p.name.toLowerCase().includes(term)).slice(0, 8);
+    for (const h of hits) {
+      const b = el("button", "qitem",
+        `${h.name} (${h.pos}) $${h.dollar.toFixed(0)}`);
+      b.onclick = () => { stagedPid = h.pid; renderBoard(); };
+      qres.appendChild(b);
+    }
+  };
+  q.oninput = runSearch;
+  q.onkeydown = (ev) => {
+    if (ev.key === "Enter") {
+      const first = qres.querySelector("button");
+      if (first) first.click();
+    }
+  };
+
+  const staged = stagedPid ? pool.find((p) => p.pid === stagedPid) : null;
+  if (staged) {
+    const runP = run.players.find((p) => p.player_id === stagedPid) ??
+      { player_id: stagedPid, pos: staged.pos, dollar: 1, proj_pts: 0,
+        tier: 99 };
+    const card = el("div", "stagecard");
+    const top = el("div", "stagetop");
+    const posCls = staged.pos === "K" || staged.pos === "DEF"
+      ? "kdef" : staged.pos.toLowerCase();
+    top.appendChild(el("span", `stagepos pos-${posCls}`, staged.pos));
+    top.appendChild(el("span", "stagename", staged.name));
+    const clear = el("button", "ghost tiny", "x");
+    clear.onclick = () => { stagedPid = null; renderBoard(); };
+    top.appendChild(clear);
+    card.appendChild(top);
+
+    const call = theCall({ league: doc.league, run, player: runP, sales,
+      marketValues, scale });
+    const v = el("div", "verdict", call.verdict);
+    card.appendChild(v);
+    const bid = el("div", "bidto", `bid to $${call.bidTo}`);
+    bid.dataset.tip = `Board value $${runP.dollar.toFixed(0)}, adjusted ` +
+      `x${call.inflation.toFixed(2)} for live inflation = ` +
+      `$${call.adjusted.toFixed(0)}, capped by your max bid ` +
+      `($${call.myMax}).`;
+    card.appendChild(bid);
+    for (const b of call.badges) card.appendChild(el("div", "badge", b));
+    if (call.verdict !== "DOLLAR ONLY") {
+      card.appendChild(el("div", "badge dim",
+        `${call.contenders} other owner${call.contenders === 1 ? "" : "s"} ` +
+        `can reach $${Math.round(call.adjusted)}`));
+    }
+
+    const form = el("div", "saleform");
+    const price = el("input");
+    price.id = "price"; price.type = "number"; price.min = 1;
+    price.placeholder = "$";
+    form.appendChild(price);
+    const ownersel = el("select");
+    ownersel.id = "ownersel";
+    const ph = el("option", null, "owner...");
+    ph.value = ""; ownersel.appendChild(ph);
+    doc.league.team_names.forEach((n, i) => {
+      const o = el("option", null, n);
+      o.value = String(i);
+      ownersel.appendChild(o);
+    });
+    form.appendChild(ownersel);
+    const draftBtn = el("button", "primary", "DRAFT");
+    form.appendChild(draftBtn);
+    card.appendChild(form);
+    const msg = el("p", "msg");
+    msg.id = "salemsg";
+    card.appendChild(msg);
+
+    const commit = async () => {
+      const pr = Number(price.value);
+      const ow = ownersel.value === "" ? null : Number(ownersel.value);
+      if (!pr || pr < 1) { msg.textContent = "Enter the winning price."; return; }
+      if (ow === null) { msg.textContent = "Pick the winning owner."; return; }
+      appendSale(doc, { pid: staged.pid, name: staged.name, pos: staged.pos,
+        owner: ow, price: pr });
+      const group = run.players.filter((p) => p.pos === staged.pos)
+        .sort((a, b) => b.dollar - a.dollar);
+      const rank = group.findIndex((p) => p.player_id === staged.pid) + 1;
+      if (rank > (run.meta.baselines[staged.pos] ?? Infinity)) {
+        freeExpanded[staged.pos] = true;
+      }
+      stagedPid = null;
+      await saveDoc(doc);
+      renderBoard();
+      $("#q")?.focus();
+    };
+    draftBtn.onclick = commit;
+    price.onkeydown = (ev) => {
+      if (ev.key === "Enter") {
+        if (ownersel.value === "") ownersel.focus();
+        else commit();
+      }
+    };
+    ownersel.onkeydown = (ev) => { if (ev.key === "Enter") commit(); };
+    saleBox.appendChild(card);
+  } else {
+    saleBox.appendChild(el("p", "hint",
+      "When a player is nominated, type his name and stage him. The Call " +
+      "answers with a verdict and a max bid."));
+  }
+  if (sales.length) {
+    const undo = el("button", "ghost tiny", "Undo last sale");
+    undo.onclick = async () => {
+      const last = sales[sales.length - 1];
+      if (!confirm(`Undo ${last.name} $${last.price}?`)) return;
+      appendUnsale(doc, last.seq);
+      await saveDoc(doc);
+      renderBoard();
+    };
+    saleBox.appendChild(undo);
+  }
+  rail.appendChild(saleBox);
+
+  // -------------------------------------------------------------- ledger
+  const ledger = el("div", "panelbox");
+  ledger.appendChild(el("h4", null, "Ledger"));
+  const owners = ownerStates(doc.league, sales);
+  const lh = el("div", "ledrow ledhead");
+  lh.appendChild(el("span", "lname", "team"));
+  const lmax = el("span", "lnum", "max");
+  lmax.dataset.tip = "The most this team can bid on one player and still " +
+    "fill every remaining spot at $1.";
+  lh.appendChild(lmax);
+  lh.appendChild(el("span", "lnum", "left"));
+  lh.appendChild(el("span", "lnum", "spots"));
+  ledger.appendChild(lh);
+  owners.forEach((o) => {
+    const r = el("div", o.idx === 0 ? "ledrow me" : "ledrow");
+    const nm = el("span", "lname click", o.name);
+    nm.onclick = () => { rosterView = o.idx; renderBoard(); };
+    r.appendChild(nm);
+    r.appendChild(el("span", "lnum", `$${o.maxBid}`));
+    r.appendChild(el("span", "lnum", `$${o.remaining}`));
+    r.appendChild(el("span", "lnum", String(o.spotsLeft)));
+    ledger.appendChild(r);
+  });
+  rail.appendChild(ledger);
+
+  // -------------------------------------------------------------- roster
+  const rosterBox = el("div", "panelbox");
+  const rsel = el("select");
+  doc.league.team_names.forEach((n, i) => {
+    const o = el("option", null, i === 0 ? `${n} (you)` : n);
+    o.value = String(i);
+    if (i === rosterView) o.selected = true;
+    rsel.appendChild(o);
+  });
+  rsel.onchange = () => { rosterView = Number(rsel.value); renderBoard(); };
+  const rh = el("h4", null, "Roster");
+  rosterBox.appendChild(rh);
+  rosterBox.appendChild(rsel);
+  const mySales = sales.filter((s) => s.owner === rosterView);
+  if (!mySales.length) {
+    rosterBox.appendChild(el("p", "hint", "No players yet."));
+  }
+  for (const s of mySales) {
+    const r = el("div", "rostrow");
+    r.appendChild(el("span", "lname", `${s.name} (${s.pos})`));
+    r.appendChild(el("span", "lnum", `$${s.price}`));
+    const x = el("button", "ghost tiny", "x");
+    x.dataset.tip = "Undo this sale";
+    x.onclick = async () => {
+      if (!confirm(`Undo ${s.name} $${s.price}?`)) return;
+      appendUnsale(doc, s.seq);
+      await saveDoc(doc);
+      renderBoard();
+    };
+    r.appendChild(x);
+    rosterBox.appendChild(r);
+  }
+  rail.appendChild(rosterBox);
+  return rail;
 }
 
 /* ---------------------------------------------------------------- boot */
