@@ -301,8 +301,9 @@ function renderImport() {
     "Import today's Yahoo or ESPN values (avg salary) as a csv or copy " +
     "and paste plain text here."));
   panel.appendChild(el("p", "hint",
-    "Projection CSVs and rankings lists work here too; the app detects " +
-    "what you pasted."));
+    "If your source is not actual auction salary values, you can also use " +
+    "other formats (projection or player rankings); the app detects what " +
+    "you pasted."));
 
   const ta = el("textarea");
   ta.rows = 10;
@@ -585,19 +586,9 @@ function renderBoard() {
   }
   const spacer = el("span", "spacer");
   bar.appendChild(spacer);
-  const add = el("button", "ghost", "Add data");
+  const add = el("button", "ghost", "Add Sources");
   add.onclick = () => { importState = { kind: "values" }; renderImport(); };
   bar.appendChild(add);
-  const refresh = el("button", "ghost", "Refresh projections");
-  refresh.onclick = async () => {
-    refresh.disabled = true; refresh.textContent = "Fetching...";
-    try { await doFetchSleeper(); renderBoard(); }
-    catch (e) {
-      refresh.textContent = "Offline; board unchanged";
-      setTimeout(renderBoard, 2500);
-    }
-  };
-  bar.appendChild(refresh);
   const reset = el("button", "ghost danger", "Reset");
   reset.onclick = async () => {
     if (!confirm("Delete all local Liquid Sheets data? Export a backup first."))
@@ -725,10 +716,25 @@ async function boot() {
       doc.league ? renderBoard() : renderWizard();
     } catch (e) { alert(e.message); }
   };
-  $("#importbtn").onclick = () => importInput.click();
-  $("#exportbtn").onclick = () => {
+  const menu = $("#gearmenu");
+  $("#gearbtn").onclick = (ev) => {
+    ev.stopPropagation();
+    menu.hidden = !menu.hidden;
+  };
+  document.addEventListener("click", (ev) => {
+    if (!menu.hidden && !menu.contains(ev.target)) menu.hidden = true;
+  });
+  $("#menuImport").onclick = () => { menu.hidden = true; importInput.click(); };
+  $("#menuExport").onclick = () => {
+    menu.hidden = true;
     if (doc) exportDoc(doc);
     else alert("Nothing to back up yet.");
+  };
+  $("#menuSleeper").onclick = async () => {
+    menu.hidden = true;
+    if (!doc || !doc.league) { alert("Finish setup first."); return; }
+    try { await doFetchSleeper(); renderBoard(); }
+    catch (e) { alert(`Fetch failed (${e.message}). Are you offline?`); }
   };
   if (doc && doc.league) renderBoard();
   else renderWizard();

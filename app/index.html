@@ -24,6 +24,17 @@ header {
 }
 header h1 { font-size: 20px; letter-spacing: 0.5px; }
 header .ver { color: var(--dim); font-size: 11px; }
+.gearwrap { position: relative; }
+#gearbtn { display: inline-flex; align-items: center; padding: 7px 9px; }
+.gearmenu { position: absolute; right: 0; top: calc(100% + 6px);
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  display: flex; flex-direction: column; min-width: 200px; z-index: 40;
+  overflow: hidden; }
+.gearmenu[hidden] { display: none; }
+.gearmenu button { border: none; background: none; border-radius: 0;
+  text-align: left; padding: 10px 14px; }
+.gearmenu button:hover { background: var(--bg); }
 header .right { margin-left: auto; }
 #main { padding: 18px 20px; max-width: 1280px; margin: 0 auto; }
 button {
@@ -131,10 +142,16 @@ textarea { width: 100%; font: inherit; padding: 8px;
 <body>
 <header>
   <h1>Liquid Sheets</h1>
-  <span class="ver">V4 (M2)</span>
-  <span class="right">
-    <button id="exportbtn" class="ghost" data-tip="Saves everything (league, data, runs, draft) to one file. Do this before draft day.">Export backup</button>
-    <button id="importbtn" class="ghost" data-tip="Restores a backup file: new device, cleared browser, or draft-day recovery.">Import backup</button>
+  <span class="ver">V5 (M2)</span>
+  <span class="right gearwrap">
+    <button id="gearbtn" class="ghost" aria-label="Menu">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
+    <div id="gearmenu" class="gearmenu" hidden>
+      <button id="menuSleeper">Import Sleeper values</button>
+      <button id="menuExport">Export backup</button>
+      <button id="menuImport">Import backup</button>
+    </div>
   </span>
   <input id="importfile" type="file" accept="application/json" hidden>
 </header>
