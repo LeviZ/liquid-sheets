@@ -272,6 +272,11 @@ async function makeRun() {
 
 let importState = null;
 
+/* Per-position expansion of the below-FREE section. Module-level, never on
+ * DOM nodes: re-renders destroy nodes (the predecessor's dead-expander
+ * lesson). Collapsed by default. */
+const freeExpanded = {};
+
 function boardRoster() {
   const roster = [];
   for (const src of Object.values(doc.sources)) {
@@ -651,13 +656,21 @@ function renderBoard() {
       const p = group[i];
       const rank = i + 1;
       if (rank === baseRank + 1) {
-        const b = el("div", "baserow");
+        const below = group.length - baseRank;
+        const b = el("div", "baserow click");
         b.appendChild(el("span", "darr"));
-        b.appendChild(el("span", null, "FREE"));
+        b.appendChild(el("span", null,
+          freeExpanded[pos] ? "FREE" : `FREE +${below}`));
         b.appendChild(el("span", "darr"));
         b.dataset.tip = "Replacement level: everyone below this line " +
-          "should cost $1. Value is measured as points above it.";
+          "should cost $1. Value is measured as points above it. " +
+          (freeExpanded[pos] ? "Click to collapse." : "Click to expand.");
+        b.onclick = () => {
+          freeExpanded[pos] = !freeExpanded[pos];
+          renderBoard();
+        };
         table.appendChild(b);
+        if (!freeExpanded[pos]) break;
       }
       // Tier cuts are gap-based; below the baseline everyone is $1 and
       // the cuts would be noise, so they stop there.
