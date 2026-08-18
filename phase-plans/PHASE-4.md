@@ -1,6 +1,6 @@
 # Phase 4 Execution Plan: Draft room generalization
 
-Status: IN PROGRESS (opened 2026-08-18). Current milestone: M1.
+Status: IN PROGRESS (opened 2026-08-18). M1 done (V1-V2, two feedback rounds). Current milestone: M2 (core landed in V3: universal mapper with Yahoo photo-format preset, projections CSV, rankings-only import with rank-implied conversion, tags import, unmatched-rows hand-matching, deal column with money-supply rescale; still open: ESPN preset tuning against a real page sample, tags surfaced on the board which lands with M4's flagged players). Wizard change of record: the Platform step was removed (V3); platform-format choice happens in the import flow where it has an effect.
 Parent: [MASTER-PLAN.md](../MASTER-PLAN.md)
 
 ## Architecture for this phase

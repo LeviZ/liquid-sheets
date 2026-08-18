@@ -84,6 +84,24 @@ textarea { width: 100%; font: inherit; padding: 8px;
   white-space: nowrap; }
 .row .pts { color: var(--dim); width: 34px; text-align: right; }
 .row .usd { width: 40px; text-align: right; font-weight: bold; }
+.panel { max-width: 620px; margin: 4vh auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 26px; }
+.panel.wide { max-width: 980px; }
+.panel h2 { margin-bottom: 10px; font-size: 18px; }
+.panel textarea { margin: 10px 0; }
+.tblwrap { overflow-x: auto; margin: 12px 0; }
+.maptable { border-collapse: collapse; font-size: 12px; width: 100%; }
+.maptable td, .maptable th { border: 1px solid var(--line); padding: 4px 7px;
+  text-align: left; white-space: nowrap; max-width: 180px;
+  overflow: hidden; text-overflow: ellipsis; }
+.maptable tr.hdr td { background: var(--line); font-weight: bold; }
+.maptable select, .formrow select { font: inherit; font-size: 12px;
+  max-width: 100%; padding: 3px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--panel); color: var(--ink); }
+.row .deal { width: 34px; text-align: right; }
+.deal.dpos { color: #1d8a53; font-weight: bold; }
+.deal.dneg { color: var(--danger); }
+.deal.dzero { color: var(--dim); }
 .row.colhead { background: transparent; color: var(--dim); font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.5px;
   border-bottom: 1px solid var(--line); }
@@ -109,7 +127,7 @@ textarea { width: 100%; font: inherit; padding: 8px;
 <body>
 <header>
   <h1>Liquid Sheets</h1>
-  <span class="ver">V2 (M1)</span>
+  <span class="ver">V3 (M2)</span>
   <span class="right"><button id="importbtn" class="ghost">Import backup</button></span>
   <input id="importfile" type="file" accept="application/json" hidden>
 </header>

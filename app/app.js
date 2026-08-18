@@ -1,7 +1,10 @@
 /* Liquid Sheets app shell, M1: wizard -> fetch -> engine -> board -> persist.
  * Draft room features arrive in M3/M4; this milestone proves the full pipe. */
 
-import { blendProjections, valueBoard, POSITIONS } from "../engine/engine.js";
+import { blendProjections, valueBoard, scoreStatLine, POSITIONS }
+  from "../engine/engine.js";
+import { KINDS, parsePaste, guessMapping, toEntries, matchEntries,
+  rankImpliedStats, marketScale } from "./importers.js";
 import { PRIOR, PRIOR_SEASON } from "./prior_2026.js";
 import { loadDoc, saveDoc, wipeDoc, newDoc, exportDoc, importDocFile }
   from "./storage.js";
@@ -51,7 +54,10 @@ const wizardState = {
   teamNames: [],
 };
 
-const STEPS = ["Platform", "League", "Roster", "Scoring", "Teams", "Data"];
+/* Platform selection was removed from the wizard (V3): it had no effect at
+ * setup time. The paste-import flow asks for the format at the moment it
+ * actually matters. */
+const STEPS = ["League", "Roster", "Scoring", "Teams", "Data"];
 
 function renderWizard() {
   const root = $("#main");
@@ -69,8 +75,7 @@ function renderWizard() {
   box.appendChild(nav);
   root.appendChild(box);
 
-  const steps = [stepPlatform, stepLeague, stepRoster, stepScoring,
-    stepTeams, stepData];
+  const steps = [stepLeague, stepRoster, stepScoring, stepTeams, stepData];
   steps[wizardState.step](body, nav);
 }
 
@@ -83,23 +88,6 @@ function navButtons(nav, { back = true, next = "Next", onNext }) {
   const n = el("button", "primary", next);
   n.onclick = onNext;
   nav.appendChild(n);
-}
-
-function stepPlatform(body, nav) {
-  body.appendChild(el("h2", null, "Where does your league live?"));
-  body.appendChild(el("p", "hint",
-    "Auction drafts only. This picks paste formats and colors later; " +
-    "every number is computed from your own settings either way."));
-  const row = el("div", "choices");
-  for (const p of ["yahoo", "espn", "other"]) {
-    const b = el("button",
-      wizardState.platform === p ? "choice on" : "choice",
-      p === "espn" ? "ESPN" : p[0].toUpperCase() + p.slice(1));
-    b.onclick = () => { wizardState.platform = p; renderWizard(); };
-    row.appendChild(b);
-  }
-  body.appendChild(row);
-  navButtons(nav, { onNext: () => { wizardState.step = 1; renderWizard(); } });
 }
 
 function numInput(labelText, value, min, max, onchange) {
@@ -118,7 +106,7 @@ function stepLeague(body, nav) {
     (v) => { wizardState.teams = v; }));
   body.appendChild(numInput("Auction budget per team ($)", wizardState.budget,
     50, 1000, (v) => { wizardState.budget = v; }));
-  navButtons(nav, { onNext: () => { wizardState.step = 2; renderWizard(); } });
+  navButtons(nav, { onNext: () => { wizardState.step++; renderWizard(); } });
 }
 
 function stepRoster(body, nav) {
@@ -132,7 +120,7 @@ function stepRoster(body, nav) {
       (v) => { wizardState.roster[slot] = v; }));
   }
   body.appendChild(grid);
-  navButtons(nav, { onNext: () => { wizardState.step = 3; renderWizard(); } });
+  navButtons(nav, { onNext: () => { wizardState.step++; renderWizard(); } });
 }
 
 function stepScoring(body, nav) {
@@ -147,9 +135,7 @@ function stepScoring(body, nav) {
     row.appendChild(b);
   }
   body.appendChild(row);
-  body.appendChild(el("p", "hint",
-    "These are the exact numbers the engine scores with. The preset fills " +
-    "them in; edit any of them to match your league."));
+  body.appendChild(el("p", "hint", "Enter your league's scoring settings"));
   const form = el("div", "form");
   const knobDefs = [
     ["pass_yd", "Points per passing yard"], ["pass_td", "Passing TD"],
@@ -167,7 +153,7 @@ function stepScoring(body, nav) {
     form.appendChild(r);
   }
   body.appendChild(form);
-  navButtons(nav, { onNext: () => { wizardState.step = 4; renderWizard(); } });
+  navButtons(nav, { onNext: () => { wizardState.step++; renderWizard(); } });
 }
 
 function stepTeams(body, nav) {
@@ -189,7 +175,7 @@ function stepTeams(body, nav) {
         names.push(`Team ${names.length + 1}`);
       }
       wizardState.teamNames = names.slice(0, wizardState.teams);
-      wizardState.step = 5; renderWizard();
+      wizardState.step++; renderWizard();
     },
   });
 }
@@ -282,6 +268,264 @@ async function makeRun() {
   await saveDoc(doc);
 }
 
+/* -------------------------------------------------------------- import */
+
+let importState = null;
+
+function boardRoster() {
+  const roster = [];
+  for (const src of Object.values(doc.sources)) {
+    for (const p of src.players) {
+      roster.push({ pid: p.player_id, name: doc.names[p.player_id] ?? "",
+        pos: p.pos });
+    }
+  }
+  if (doc.kdef) {
+    for (const p of doc.kdef.players) {
+      roster.push({ pid: p.player_id, name: doc.names[p.player_id] ?? "",
+        pos: p.pos });
+    }
+  }
+  const seen = new Set();
+  return roster.filter((r) => !seen.has(r.pid) && seen.add(r.pid));
+}
+
+function renderImport() {
+  const root = $("#main");
+  root.innerHTML = "";
+  const panel = el("div", "panel");
+  root.appendChild(panel);
+  panel.appendChild(el("h2", null, "Add data"));
+  const kinds = el("div", "choices");
+  for (const [k, def] of Object.entries(KINDS)) {
+    const b = el("button",
+      importState.kind === k ? "choice on" : "choice", def.label);
+    b.onclick = () => { importState.kind = k; renderImport(); };
+    kinds.appendChild(b);
+  }
+  panel.appendChild(kinds);
+  panel.appendChild(el("p", "hint", KINDS[importState.kind].hint));
+
+  const labelRow = el("label", "field");
+  labelRow.appendChild(el("span", null, "Source name"));
+  const labelInp = el("input");
+  labelInp.value = importState.label ?? importState.kind;
+  labelInp.onchange = () => { importState.label = labelInp.value.trim(); };
+  labelRow.appendChild(labelInp);
+  if (importState.kind !== "tags") panel.appendChild(labelRow);
+
+  const ta = el("textarea");
+  ta.rows = 10;
+  ta.placeholder = "Paste here (or choose a file below)";
+  ta.value = importState.text ?? "";
+  ta.oninput = () => { importState.text = ta.value; };
+  panel.appendChild(ta);
+
+  const fileRow = el("div", "choices");
+  const fileInp = el("input");
+  fileInp.type = "file"; fileInp.accept = ".csv,.tsv,.txt";
+  fileInp.onchange = async () => {
+    if (fileInp.files.length) {
+      importState.text = await fileInp.files[0].text();
+      ta.value = importState.text;
+    }
+  };
+  fileRow.appendChild(fileInp);
+  panel.appendChild(fileRow);
+
+  const msg = el("p", "msg");
+  panel.appendChild(msg);
+  const nav = el("div", "wiznav");
+  const cancel = el("button", "ghost", "Cancel");
+  cancel.onclick = () => { importState = null; renderBoard(); };
+  nav.appendChild(cancel);
+  const prev = el("button", "primary", "Preview");
+  prev.onclick = () => {
+    const parsed = parsePaste(importState.text ?? "");
+    if (!parsed.rows.length) { msg.textContent = "Nothing parseable found."; return; }
+    importState.parsed = parsed;
+    if (parsed.preset === "yahoo" && importState.kind === "values") {
+      importState.mapping =
+        ["name", "pos", "team", "ignore", "value", "ignore"];
+    } else {
+      importState.mapping =
+        guessMapping(parsed.headers, parsed.rows, importState.kind);
+    }
+    renderMapper();
+  };
+  nav.appendChild(prev);
+  panel.appendChild(nav);
+}
+
+function renderMapper() {
+  const root = $("#main");
+  root.innerHTML = "";
+  const panel = el("div", "panel wide");
+  root.appendChild(panel);
+  const { parsed, mapping, kind } = importState;
+  panel.appendChild(el("h2", null,
+    `Confirm the columns (${parsed.rows.length} rows` +
+    (parsed.preset === "yahoo" ? ", Yahoo format detected" : "") + ")"));
+  panel.appendChild(el("p", "hint",
+    "The app guessed what each column is. Fix any dropdown that is wrong; " +
+    "set columns you do not want to \"ignore\"."));
+  const fields = ["ignore", ...KINDS[kind].fields];
+  const tbl = el("table", "maptable");
+  const selRow = el("tr");
+  mapping.forEach((f, i) => {
+    const td = el("th");
+    const sel = el("select");
+    for (const opt of fields) {
+      const o = el("option", null, opt);
+      o.value = opt;
+      if (opt === f) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { importState.mapping[i] = sel.value; };
+    td.appendChild(sel);
+    selRow.appendChild(td);
+  });
+  tbl.appendChild(selRow);
+  if (parsed.headers) {
+    const hr = el("tr", "hdr");
+    parsed.headers.forEach((h) => hr.appendChild(el("td", null, h)));
+    tbl.appendChild(hr);
+  }
+  for (const r of parsed.rows.slice(0, 6)) {
+    const tr = el("tr");
+    r.forEach((c) => tr.appendChild(el("td", null, c)));
+    tbl.appendChild(tr);
+  }
+  const wrap = el("div", "tblwrap");
+  wrap.appendChild(tbl);
+  panel.appendChild(wrap);
+  const msg = el("p", "msg");
+  panel.appendChild(msg);
+  const nav = el("div", "wiznav");
+  const back = el("button", "ghost", "Back");
+  back.onclick = renderImport;
+  nav.appendChild(back);
+  const imp = el("button", "primary", "Import");
+  imp.onclick = () => {
+    if (!importState.mapping.includes("name")) {
+      msg.textContent = "One column must be mapped to \"name\"."; return;
+    }
+    if (kind === "rankings" && !importState.mapping.includes("rank")) {
+      msg.textContent = "Rankings need a \"rank\" column."; return;
+    }
+    const entries = toEntries(parsed.rows, importState.mapping);
+    const { matched, unmatched } = matchEntries(entries, boardRoster());
+    importState.matched = matched;
+    importState.unmatched = unmatched;
+    if (unmatched.length) renderUnmatched();
+    else finishImport();
+  };
+  nav.appendChild(imp);
+  panel.appendChild(nav);
+}
+
+function renderUnmatched() {
+  const root = $("#main");
+  root.innerHTML = "";
+  const panel = el("div", "panel");
+  root.appendChild(panel);
+  panel.appendChild(el("h2", null,
+    `${importState.unmatched.length} rows did not match a player`));
+  panel.appendChild(el("p", "hint",
+    "Nothing is dropped silently. Match each row by hand or skip it."));
+  const run = doc.runs[doc.runs.length - 1];
+  const dollars = new Map(
+    (run?.players ?? []).map((p) => [p.player_id, p.dollar]));
+  const roster = boardRoster()
+    .sort((a, b) => (dollars.get(b.pid) ?? 0) - (dollars.get(a.pid) ?? 0));
+  importState.resolutions = importState.unmatched.map(() => null);
+  const list = el("div", "form");
+  importState.unmatched.forEach((e, i) => {
+    const r = el("label", "formrow");
+    r.appendChild(el("span", null,
+      `${e.name}${e.pos ? ` (${e.pos})` : ""}`));
+    const sel = el("select");
+    sel.appendChild(el("option", null, "skip"));
+    const cands = e.pos ? roster.filter((p) => p.pos === e.pos) : roster;
+    for (const c of cands.slice(0, 80)) {
+      const o = el("option", null, `${c.name} (${c.pos})`);
+      o.value = c.pid;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => {
+      importState.resolutions[i] = sel.value === "skip" ? null : sel.value;
+    };
+    r.appendChild(sel);
+    list.appendChild(r);
+  });
+  panel.appendChild(list);
+  const nav = el("div", "wiznav");
+  const back = el("button", "ghost", "Back");
+  back.onclick = renderMapper;
+  nav.appendChild(back);
+  const fin = el("button", "primary", "Finish import");
+  fin.onclick = () => {
+    importState.unmatched.forEach((e, i) => {
+      if (importState.resolutions[i]) {
+        importState.matched.push({ entry: e, pid: importState.resolutions[i] });
+      }
+    });
+    finishImport();
+  };
+  nav.appendChild(fin);
+  panel.appendChild(nav);
+}
+
+async function finishImport() {
+  const { kind, matched } = importState;
+  const label = (importState.label ?? kind).trim() || kind;
+  const as_of = new Date().toISOString().slice(0, 10);
+  const posOf = new Map(boardRoster().map((r) => [r.pid, r.pos]));
+  if (kind === "values") {
+    const values = {};
+    for (const m of matched) {
+      if (m.entry.value != null) values[m.pid] = m.entry.value;
+    }
+    doc.market = { label, as_of, values };
+  } else if (kind === "tags") {
+    doc.tags = doc.tags ?? {};
+    for (const m of matched) {
+      const cur = doc.tags[m.pid] ?? { tags: [], note: "" };
+      if (m.entry.tags) cur.tags = m.entry.tags;
+      if (m.entry.note) cur.note = m.entry.note;
+      doc.tags[m.pid] = cur;
+    }
+  } else if (kind === "projections") {
+    doc.sources[label] = {
+      as_of,
+      players: matched.filter((m) => posOf.get(m.pid))
+        .map((m) => ({ player_id: m.pid, pos: posOf.get(m.pid),
+          team: m.entry.team ?? null, stats: m.entry.stats })),
+    };
+    await makeRun();
+  } else if (kind === "rankings") {
+    const srcNames = Object.keys(doc.sources);
+    let reference;
+    if (srcNames.length > 1) {
+      reference = blendProjections(doc.sources, doc.league.scoring).players;
+    } else if (srcNames.length === 1) {
+      reference = doc.sources[srcNames[0]].players;
+    } else {
+      alert("Fetch or import projections first; rankings need a curve to map onto.");
+      importState = null; renderBoard(); return;
+    }
+    const withPos = matched.map((m) => ({ ...m, pos: posOf.get(m.pid) }))
+      .filter((m) => m.pos);
+    const players = rankImpliedStats(withPos, reference,
+      (p) => scoreStatLine(p.pos, p.stats, doc.league.scoring));
+    doc.sources[label] = { as_of, players };
+    await makeRun();
+  }
+  await saveDoc(doc);
+  importState = null;
+  renderBoard();
+}
+
 /* --------------------------------------------------------------- board */
 
 function renderBoard() {
@@ -308,8 +552,20 @@ function renderBoard() {
       "reaches $1 (last starter plus a bench share). VBD measures points " +
       "above this player.");
   }
+  const srcNames = Object.keys(doc.sources);
+  if (srcNames.length) {
+    const c = el("span", "chip",
+      `sources: ${srcNames.map((s) => `${s}@${doc.sources[s].as_of}`)
+        .join(", ")}`);
+    c.dataset.tip = "Projection sources loaded. More than one and the " +
+      "board runs on their stat-by-stat average (the blend).";
+    bar.appendChild(c);
+  }
   const spacer = el("span", "spacer");
   bar.appendChild(spacer);
+  const add = el("button", "ghost", "Add data");
+  add.onclick = () => { importState = { kind: "values" }; renderImport(); };
+  bar.appendChild(add);
   const refresh = el("button", "ghost", "Refresh projections");
   refresh.onclick = async () => {
     refresh.disabled = true; refresh.textContent = "Fetching...";
@@ -347,6 +603,19 @@ function renderBoard() {
     return;
   }
 
+  // Deal column exists only when market values were imported; absence
+  // removes the feature entirely (never zeros).
+  let scale = null, marketValues = null;
+  if (doc.market && Object.keys(doc.market.values).length) {
+    marketValues = doc.market.values;
+    scale = marketScale(run.players, marketValues,
+      doc.league.teams * doc.league.model_params.dollar_slots_per_team);
+    const c = el("span", "chip",
+      `market: ${doc.market.label}@${doc.market.as_of} x${scale.toFixed(2)}`);
+    c.dataset.tip = "Pasted market prices, rescaled by this factor so " +
+      "their money supply matches your league's before comparing.";
+    bar.insertBefore(c, bar.querySelector(".spacer"));
+  }
   const headerRow = (table) => {
     const h = el("div", "row colhead");
     h.appendChild(el("span", "nm", "Player"));
@@ -358,6 +627,13 @@ function renderBoard() {
     usd.dataset.tip = "Auction value: this player's share of the league's " +
       "money, by points above the positional baseline.";
     h.appendChild(usd);
+    if (marketValues) {
+      const dl = el("span", "deal", "Deal");
+      dl.dataset.tip = "Our value minus the market price (rescaled to your " +
+        "league's money). Green: the room likely underprices him. Within " +
+        "$2 is noise and stays grey.";
+      h.appendChild(dl);
+    }
     table.appendChild(h);
   };
   const cols = el("div", "cols");
@@ -378,6 +654,17 @@ function renderBoard() {
       row.appendChild(el("span", "nm", doc.names[p.player_id] ?? p.player_id));
       row.appendChild(el("span", "pts", p.proj_pts.toFixed(0)));
       row.appendChild(el("span", "usd", `$${p.dollar.toFixed(0)}`));
+      if (marketValues) {
+        const mv = marketValues[p.player_id];
+        if (mv == null) row.appendChild(el("span", "deal", ""));
+        else {
+          const d = p.dollar - mv * scale;
+          const cls = Math.abs(d) <= 2 ? "deal dzero"
+            : d > 0 ? "deal dpos" : "deal dneg";
+          row.appendChild(el("span", cls,
+            `${d > 0 ? "+" : ""}${d.toFixed(0)}`));
+        }
+      }
       table.appendChild(row);
     }
     col.appendChild(table);
@@ -386,8 +673,6 @@ function renderBoard() {
   if (doc.kdef && doc.kdef.players.length) {
     const col = el("div", "col");
     const h3 = el("h3", "pos-kdef", "K / DEF");
-    h3.dataset.tip = "Kickers and defenses are priced at $1 by design: " +
-      "their year-to-year value is too noisy to bid on.";
     col.appendChild(h3);
     const table = el("div", "rows");
     for (const sub of ["K", "DEF"]) {
