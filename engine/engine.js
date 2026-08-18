@@ -10,9 +10,10 @@
  *   baselines on exact halves.
  * - Sorts rely on Array.prototype.sort stability (guaranteed since ES2019)
  *   to preserve tie order exactly as the Python engine's stable sorts do.
- * - baselines() reads cfg.model_params (league defaults), while alpha/theta
- *   come from the run's possibly-overridden params: the Python engine does
- *   the same, and runs were recorded under that behavior.
+ * - baselines() takes the run's model params so a baseline_bench_share
+ *   override takes effect (both engines fixed 2026-08-18; the Python
+ *   original silently ignored the override. All recorded runs used
+ *   defaults, so golden-master agreement is unaffected).
  */
 
 export const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -61,9 +62,9 @@ export function flexShares(slots) {
   return { RB: fRb, TE: fTe, WR: 1.0 - fRb - fTe, QB: 0.0 };
 }
 
-export function baselines(cfg) {
+export function baselines(cfg, mp = cfg.model_params) {
   const slots = cfg.roster_slots;
-  const share = cfg.model_params.baseline_bench_share;
+  const share = mp.baseline_bench_share;
   const f = flexShares(slots);
   const flex = slots.FLEX ?? 0;
   const out = {};
@@ -145,7 +146,7 @@ export function valueBoard(cfg, players, prior, mp = cfg.model_params) {
     });
   }
 
-  const nBase = baselines(cfg);
+  const nBase = baselines(cfg, mp);
   const f = flexShares(cfg.roster_slots);
   const flex = cfg.roster_slots.FLEX ?? 0;
   const nVols = {};
