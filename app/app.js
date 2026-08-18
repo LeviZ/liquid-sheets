@@ -651,10 +651,12 @@ function renderBoard() {
       const p = group[i];
       const rank = i + 1;
       if (rank === baseRank + 1) {
-        const b = el("div", "baserow", "BASELINE");
-        b.dataset.tip = "Replacement level: the engine expects a starter " +
-          "of this caliber to be findable for $1. Value is measured as " +
-          "points above this line.";
+        const b = el("div", "baserow");
+        b.appendChild(el("span", "darr"));
+        b.appendChild(el("span", null, "FREE"));
+        b.appendChild(el("span", "darr"));
+        b.dataset.tip = "Replacement level: everyone below this line " +
+          "should cost $1. Value is measured as points above it.";
         table.appendChild(b);
       }
       // Tier cuts are gap-based; below the baseline everyone is $1 and

@@ -133,6 +133,9 @@ textarea { width: 100%; font: inherit; padding: 8px;
 .baserow { font-weight: bold; color: var(--ink); padding: 3px 8px; }
 .baserow::before, .baserow::after { border-top: 3px solid var(--ink);
   opacity: 0.55; }
+.darr { width: 0; height: 0; border-left: 4px solid transparent;
+  border-right: 4px solid transparent; border-top: 5px solid var(--ink);
+  opacity: 0.7; }
 .empty { text-align: center; margin-top: 10vh; color: var(--dim); }
 .empty button { margin-top: 14px; }
 [data-tip] { position: relative; cursor: help; }
@@ -154,7 +157,7 @@ textarea { width: 100%; font: inherit; padding: 8px;
     <h1>Liquid Sheets</h1>
     <div id="spendline" class="sub" hidden></div>
   </div>
-  <span class="ver">V6 (M2)</span>
+  <span class="ver">V7 (M2)</span>
   <span class="right gearwrap">
     <button id="gearbtn" class="ghost" aria-label="Menu">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
