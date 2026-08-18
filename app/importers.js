@@ -30,13 +30,14 @@ export const STAT_FIELDS = [
 
 export const KINDS = {
   values: {
-    label: "Platform dollar values",
-    hint: "Copy your platform's player list showing auction values " +
-      "(Yahoo or ESPN player pages, or any site's value column).",
+    label: "Market values",
+    hint: "Add the values that the rest of your league will likely be " +
+      "using. Import today's Yahoo or ESPN values (avg salary) as a csv " +
+      "or copy and paste plain text here.",
     fields: ["name", "pos", "team", "value"],
   },
   projections: {
-    label: "Projections (CSV)",
+    label: "Projections",
     hint: "A stat-line projections export: one row per player with " +
       "yardage, TD, reception columns. Becomes a source in the blend.",
     fields: ["name", "pos", "team", ...STAT_FIELDS],
@@ -47,13 +48,46 @@ export const KINDS = {
       "rank-implied stat lines and blended as a source.",
     fields: ["rank", "name", "pos", "team"],
   },
-  tags: {
-    label: "Player tags and notes",
-    hint: "Your own research: tags and a short note per player. Tags " +
-      "never touch the numbers; they ride beside them.",
-    fields: ["name", "pos", "tags", "note"],
-  },
 };
+
+/* Deterministic kind detection: nobody should have to tell the app what
+ * they pasted. Stat columns mean projections; a dollar-ish column means
+ * market values; a bare ordered list means rankings. The mapper screen
+ * shows the verdict and lets the user override it. */
+export function detectKind(parsed) {
+  if (parsed.preset === "yahoo") return "values";
+  const { headers, rows } = parsed;
+  if (headers) {
+    const statHits = headers.filter((h) =>
+      HEADER_HINTS.some(([re, f]) => STAT_FIELDS.includes(f) &&
+        re.test(h.trim()))).length;
+    if (statHits >= 3) return "projections";
+    if (headers.some((h) => /(avg|salary|value|price|\$|aav|cost)/i.test(h))) {
+      return "values";
+    }
+    if (headers.some((h) => /^(rank|rk|#|ovr|overall)$/i.test(h.trim()))) {
+      return "rankings";
+    }
+  }
+  const sample = rows.slice(0, 12);
+  if (sample.some((r) => r.some((c) => String(c).includes("$")))) {
+    return "values";
+  }
+  const width = rows[0]?.length ?? 0;
+  const numericCols = [];
+  for (let i = 0; i < width; i++) {
+    const cells = sample.map((r) => r[i] ?? "").filter((c) => c !== "");
+    if (cells.length && cells.every((c) => num(c) !== null)) numericCols.push(i);
+  }
+  if (numericCols.length >= 4) return "projections";
+  if (numericCols.length === 1) {
+    const vals = sample.map((r) => num(r[numericCols[0]]))
+      .filter((v) => v !== null);
+    const sorted = vals.every((v, i) => i === 0 || v >= vals[i - 1]);
+    if (sorted && vals[0] <= 5) return "rankings";
+  }
+  return "values";
+}
 
 /* ------------------------------------------------------------ parsing */
 

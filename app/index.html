@@ -45,7 +45,11 @@ button:disabled { opacity: 0.55; cursor: default; }
 .crumb.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .wizbody h2 { margin-bottom: 10px; font-size: 18px; }
 .hint { color: var(--dim); font-size: 13px; margin-bottom: 16px; }
-.choices { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+.choices { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap;
+  align-items: center; }
+.radio { display: inline-flex; gap: 6px; align-items: center;
+  font-size: 14px; cursor: pointer; }
+.radio input { accent-color: var(--accent); }
 .choice.on { background: var(--accent); color: var(--accent-ink);
   border-color: var(--accent); }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0;
@@ -127,8 +131,11 @@ textarea { width: 100%; font: inherit; padding: 8px;
 <body>
 <header>
   <h1>Liquid Sheets</h1>
-  <span class="ver">V3 (M2)</span>
-  <span class="right"><button id="importbtn" class="ghost">Import backup</button></span>
+  <span class="ver">V4 (M2)</span>
+  <span class="right">
+    <button id="exportbtn" class="ghost" data-tip="Saves everything (league, data, runs, draft) to one file. Do this before draft day.">Export backup</button>
+    <button id="importbtn" class="ghost" data-tip="Restores a backup file: new device, cleared browser, or draft-day recovery.">Import backup</button>
+  </span>
   <input id="importfile" type="file" accept="application/json" hidden>
 </header>
 <div id="main"></div>

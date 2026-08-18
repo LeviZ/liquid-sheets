@@ -4,7 +4,7 @@
 import { blendProjections, valueBoard, scoreStatLine, POSITIONS }
   from "../engine/engine.js";
 import { KINDS, parsePaste, guessMapping, toEntries, matchEntries,
-  rankImpliedStats, marketScale } from "./importers.js";
+  rankImpliedStats, marketScale, detectKind } from "./importers.js";
 import { PRIOR, PRIOR_SEASON } from "./prior_2026.js";
 import { loadDoc, saveDoc, wipeDoc, newDoc, exportDoc, importDocFile }
   from "./storage.js";
@@ -296,23 +296,13 @@ function renderImport() {
   const panel = el("div", "panel");
   root.appendChild(panel);
   panel.appendChild(el("h2", null, "Add data"));
-  const kinds = el("div", "choices");
-  for (const [k, def] of Object.entries(KINDS)) {
-    const b = el("button",
-      importState.kind === k ? "choice on" : "choice", def.label);
-    b.onclick = () => { importState.kind = k; renderImport(); };
-    kinds.appendChild(b);
-  }
-  panel.appendChild(kinds);
-  panel.appendChild(el("p", "hint", KINDS[importState.kind].hint));
-
-  const labelRow = el("label", "field");
-  labelRow.appendChild(el("span", null, "Source name"));
-  const labelInp = el("input");
-  labelInp.value = importState.label ?? importState.kind;
-  labelInp.onchange = () => { importState.label = labelInp.value.trim(); };
-  labelRow.appendChild(labelInp);
-  if (importState.kind !== "tags") panel.appendChild(labelRow);
+  panel.appendChild(el("p", "hint",
+    "Add the values that the rest of your league will likely be using. " +
+    "Import today's Yahoo or ESPN values (avg salary) as a csv or copy " +
+    "and paste plain text here."));
+  panel.appendChild(el("p", "hint",
+    "Projection CSVs and rankings lists work here too; the app detects " +
+    "what you pasted."));
 
   const ta = el("textarea");
   ta.rows = 10;
@@ -344,17 +334,21 @@ function renderImport() {
     const parsed = parsePaste(importState.text ?? "");
     if (!parsed.rows.length) { msg.textContent = "Nothing parseable found."; return; }
     importState.parsed = parsed;
-    if (parsed.preset === "yahoo" && importState.kind === "values") {
-      importState.mapping =
-        ["name", "pos", "team", "ignore", "value", "ignore"];
-    } else {
-      importState.mapping =
-        guessMapping(parsed.headers, parsed.rows, importState.kind);
-    }
+    importState.kind = detectKind(parsed);
+    setMapping();
     renderMapper();
   };
   nav.appendChild(prev);
   panel.appendChild(nav);
+}
+
+function setMapping() {
+  const { parsed, kind } = importState;
+  if (parsed.preset === "yahoo" && kind === "values") {
+    importState.mapping = ["name", "pos", "team", "ignore", "value", "ignore"];
+  } else {
+    importState.mapping = guessMapping(parsed.headers, parsed.rows, kind);
+  }
 }
 
 function renderMapper() {
@@ -366,6 +360,41 @@ function renderMapper() {
   panel.appendChild(el("h2", null,
     `Confirm the columns (${parsed.rows.length} rows` +
     (parsed.preset === "yahoo" ? ", Yahoo format detected" : "") + ")"));
+  const kindRow = el("div", "choices");
+  kindRow.appendChild(el("span", "hint", "Looks like:"));
+  for (const [k, def] of Object.entries(KINDS)) {
+    const b = el("button", kind === k ? "choice on" : "choice", def.label);
+    b.onclick = () => { importState.kind = k; setMapping(); renderMapper(); };
+    kindRow.appendChild(b);
+  }
+  panel.appendChild(kindRow);
+  if (kind === "values") {
+    const radios = el("div", "choices radios");
+    radios.appendChild(el("span", "hint", "These values are from:"));
+    for (const p of ["yahoo", "espn"]) {
+      const lab = el("label", "radio");
+      const r = el("input");
+      r.type = "radio"; r.name = "platform"; r.value = p;
+      const current = importState.platform ??
+        (parsed.preset === "yahoo" ? "yahoo" : "yahoo");
+      importState.platform = current;
+      r.checked = current === p;
+      r.onchange = () => { importState.platform = p; };
+      lab.appendChild(r);
+      lab.appendChild(el("span", null, p === "espn" ? "ESPN" : "Yahoo"));
+      radios.appendChild(lab);
+    }
+    panel.appendChild(radios);
+  } else {
+    const labelRow = el("label", "field");
+    labelRow.appendChild(el("span", null, "Source name"));
+    const labelInp = el("input");
+    labelInp.value = importState.label ?? kind;
+    importState.label = importState.label ?? kind;
+    labelInp.onchange = () => { importState.label = labelInp.value.trim(); };
+    labelRow.appendChild(labelInp);
+    panel.appendChild(labelRow);
+  }
   panel.appendChild(el("p", "hint",
     "The app guessed what each column is. Fix any dropdown that is wrong; " +
     "set columns you do not want to \"ignore\"."));
@@ -478,7 +507,8 @@ function renderUnmatched() {
 
 async function finishImport() {
   const { kind, matched } = importState;
-  const label = (importState.label ?? kind).trim() || kind;
+  const label = kind === "values" ? (importState.platform ?? "yahoo")
+    : (importState.label ?? kind).trim() || kind;
   const as_of = new Date().toISOString().slice(0, 10);
   const posOf = new Map(boardRoster().map((r) => [r.pid, r.pos]));
   if (kind === "values") {
@@ -487,14 +517,6 @@ async function finishImport() {
       if (m.entry.value != null) values[m.pid] = m.entry.value;
     }
     doc.market = { label, as_of, values };
-  } else if (kind === "tags") {
-    doc.tags = doc.tags ?? {};
-    for (const m of matched) {
-      const cur = doc.tags[m.pid] ?? { tags: [], note: "" };
-      if (m.entry.tags) cur.tags = m.entry.tags;
-      if (m.entry.note) cur.note = m.entry.note;
-      doc.tags[m.pid] = cur;
-    }
   } else if (kind === "projections") {
     doc.sources[label] = {
       as_of,
@@ -576,9 +598,6 @@ function renderBoard() {
     }
   };
   bar.appendChild(refresh);
-  const exp = el("button", "ghost", "Export backup");
-  exp.onclick = () => exportDoc(doc);
-  bar.appendChild(exp);
   const reset = el("button", "ghost danger", "Reset");
   reset.onclick = async () => {
     if (!confirm("Delete all local Liquid Sheets data? Export a backup first."))
@@ -707,6 +726,10 @@ async function boot() {
     } catch (e) { alert(e.message); }
   };
   $("#importbtn").onclick = () => importInput.click();
+  $("#exportbtn").onclick = () => {
+    if (doc) exportDoc(doc);
+    else alert("Nothing to back up yet.");
+  };
   if (doc && doc.league) renderBoard();
   else renderWizard();
 }
