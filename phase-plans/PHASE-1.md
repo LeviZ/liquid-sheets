@@ -1,6 +1,6 @@
 # Phase 1 Execution Plan: Audience and feature triage
 
-Status: IN PROGRESS (opened 2026-08-18)
+Status: COMPLETE (2026-08-18). Triage ratified with two amendments (my_calls deferred; co-pilot resolved via [ADR-0004](../docs/adr/0004-one-app-plus-post-launch-power-kit.md)). Exit gate met: every row bucketed, none unresolved.
 Parent: [MASTER-PLAN.md](../MASTER-PLAN.md)
 
 ## Inputs decided by Levi (2026-08-18)

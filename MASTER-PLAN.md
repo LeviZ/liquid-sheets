@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phase 0 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Next: Phase 1.
+Status: ACTIVE. Phases 0 and 1 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope is ratified in PRODUCT-SCOPE.md. Next: Phase 2 (data-in design).
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
@@ -131,3 +131,10 @@ Appended at each phase exit.
 - Levi decided: never monetize, portfolio piece first. This resolved license (MIT), hosting identity (subdomain of his Liquid Workflows domain, not liquidsheets.com, which was available but deliberately not purchased), and open-source posture (public from day one, planning docs included) all in one stroke. Lesson for later phases: the portfolio framing is a decision-making shortcut; when torn, choose the option that shows the work.
 - The repo is `liquid-sheets-public/` itself, git-initialized locally. GitHub push deferred pending Levi's account confirmation (his own global rule about GitHub accounts, plus a new public repo is outward-facing).
 - Implication for Phase 1: with no revenue pressure, the audience decision can optimize purely for "who will genuinely use and appreciate this," not market size. That likely tilts toward the serious-hobbyist auction drafter rather than the broadest casual audience, but that is Phase 1's call to make, not Phase 0's.
+
+### Phase 1 (closed 2026-08-18)
+
+- The three framing calls came fast and confident (serious hobbyists, auction-only stated proudly, Yahoo+ESPN first-class): ADRs 0001-0003. The predicted tilt from Phase 0 held exactly.
+- Full triage ratified in PRODUCT-SCOPE.md on the first review pass with only two amendments, both in the direction of a LEANER v1: my_calls went from generalized to deferred, and the co-pilot question resolved into "one app plus a post-launch power kit" (ADR-0004) rather than a second app version. Lesson: when Levi amends, he cuts; propose lean and let him add.
+- The power kit pattern is the durable invention of this phase: the app never ships AI content or scrapers, but the repo can publish the prompts and personal-use scripts as a post-launch encore, with an import hook in v1 so kit output flows in. It converts a liability (shipped AI takes) into portfolio material (published prompts).
+- Handed to Phase 2: the per-source licensing review now covers three things: data-in paths for the app, the shipped availability-prior aggregate, and which power-kit scripts (public-API pulls vs. scrapers) may be published. Also inherited: the wizard scope list at the bottom of PRODUCT-SCOPE.md, the one-source floor requirement, and the opinions/tags import format as a real deliverable, not an afterthought.

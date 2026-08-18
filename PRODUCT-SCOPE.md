@@ -1,6 +1,6 @@
 # Product Scope - Feature Triage
 
-Status: **PROPOSED** (drafted 2026-08-18, awaiting Levi's ratification). Becomes the single source of truth once ratified; after that, changes require a note in the MASTER-PLAN.md learnings log.
+Status: **RATIFIED** (2026-08-18, by Levi). Amendments at ratification: my_calls moved to DEFERRED; co-pilot resolved as one app plus a post-launch power kit ([ADR-0004](docs/adr/0004-one-app-plus-post-launch-power-kit.md)). This is now the single source of truth; changes require a note in the MASTER-PLAN.md learnings log.
 
 Framing: every call below cites the audience from [ADR-0001](docs/adr/0001-serious-hobbyist-auction-drafter-audience.md) (serious-hobbyist auction drafter), the auction-only stance ([ADR-0002](docs/adr/0002-auction-only-no-snake.md)), and the platform posture ([ADR-0003](docs/adr/0003-first-class-yahoo-and-espn.md)). The inventory is the full feature set of the private predecessor.
 
@@ -16,7 +16,7 @@ Buckets: **AS-IS** (port faithfully) / **GENERALIZED** (survives, reshaped for a
 | Multi-source blend | GENERALIZED | From five hardcoded sources to N user-provided sources (1 to many); the one-source floor must be first-class |
 | Rank-implied stat lines for rankings-only sources | GENERALIZED | The Dell-loader trick becomes a generic "import a rankings list" path |
 | Runs immutability (every number traces to a run) | AS-IS | Doctrine R1; also the debugging story when a stranger reports wrong numbers |
-| my_calls named bets (clamped, thesis required, off by default) | GENERALIZED | Serious hobbyists have convictions; the discipline (clamp + mandatory thesis + separate run) is the feature |
+| my_calls named bets (clamped, thesis required, off by default) | DEFERRED | Ratification call by Levi: v1 surface stays lean; the engine and schema keep room for it so a later version only adds UI |
 | Toggle discipline (adjustments off by default) | AS-IS | Doctrine R2, product identity |
 | Levi-league priors (WR overspend, QB anchor gap, etc.) | CUT | League-specific by definition; the *mechanism* for users to encode their own league reads is DEFERRED |
 | Post-season evaluation views (calibration, market_vs_me) | DEFERRED | High value, zero draft-day value; needs season-end actuals design |
@@ -58,11 +58,15 @@ Buckets: **AS-IS** (port faithfully) / **GENERALIZED** (survives, reshaped for a
 
 ## AI co-pilot
 
+Resolved at ratification via [ADR-0004](docs/adr/0004-one-app-plus-post-launch-power-kit.md): one app, never two versions; the AI-savvy path ships as a post-launch "power kit" in the same repo.
+
 | Feature | Bucket | Rationale |
 |---|---|---|
 | Deterministic flow read (runs, temperature, crunch, hoarders, pace) | GENERALIZED | Contains no AI; it is pure ledger heuristics and ports as ordinary code. Keeps the co-pilot panel alive without any API key |
-| Pre-computed AI opinions | CUT | Shipping AI-generated takes on real players to the public is a liability and violates no-data-shipped; users' own notes replace it |
-| Live "reading the room" (BYO Anthropic API key) | DEFERRED | Genuinely differentiating, but v1 ships without any API-key UX; design must keep the panel's third slot open |
+| Pre-computed AI opinions shipped in-app | CUT | We never ship AI-generated takes on real players; users generate their own via the power kit and import them |
+| Opinions/tags import hook | GENERALIZED | Small v1 hook so power-kit output (user-generated opinions, tags) flows onto the board; keeps the deferred rows from being foreclosed |
+| Live "reading the room" (BYO Anthropic API key in-app) | DEFERRED | Genuinely differentiating, but v1 ships without any API-key UX; the panel's third slot stays open |
+| Power kit (published co-pilot and opinion-sweep prompts, personal-use ingestion scripts, BYO-AI walkthrough) | DEFERRED | The post-launch encore per [ADR-0004](docs/adr/0004-one-app-plus-post-launch-power-kit.md); per-script licensing posture decided in Phase 2 |
 
 ## What the wizard must therefore cover (input to Phase 2)
 
@@ -70,4 +74,4 @@ Budget, team count, roster shape (starters, bench, flex definitions), scoring ru
 
 ## Ratification
 
-- [ ] Levi has reviewed every row, amended where needed, and ratified. (Then flip Status to RATIFIED.)
+- [x] Levi has reviewed every row, amended where needed, and ratified (2026-08-18).
