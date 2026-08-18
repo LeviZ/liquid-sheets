@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phase 0 not yet started.
+Status: ACTIVE. Phase 0 COMPLETE (2026-08-18, pending only the GitHub push). Next: Phase 1.
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
@@ -123,4 +123,11 @@ Exit gate: the 2027 season happens on it.
 
 ## Learnings log
 
-Appended at each phase exit. Empty until Phase 0 closes.
+Appended at each phase exit.
+
+### Phase 0 (closed 2026-08-18)
+
+- Name is clean: no software product or fantasy tool called "Liquid Sheets" exists (web-checked; no formal trademark search, residual risk accepted for a free tool). Nearest neighbor in the space is Grateful Sheets, an Excel tool, which is useful competitive awareness for Phase 1.
+- Levi decided: never monetize, portfolio piece first. This resolved license (MIT), hosting identity (subdomain of his Liquid Workflows domain, not liquidsheets.com, which was available but deliberately not purchased), and open-source posture (public from day one, planning docs included) all in one stroke. Lesson for later phases: the portfolio framing is a decision-making shortcut; when torn, choose the option that shows the work.
+- The repo is `liquid-sheets-public/` itself, git-initialized locally. GitHub push deferred pending Levi's account confirmation (his own global rule about GitHub accounts, plus a new public repo is outward-facing).
+- Implication for Phase 1: with no revenue pressure, the audience decision can optimize purely for "who will genuinely use and appreciate this," not market size. That likely tilts toward the serious-hobbyist auction drafter rather than the broadest casual audience, but that is Phase 1's call to make, not Phase 0's.
