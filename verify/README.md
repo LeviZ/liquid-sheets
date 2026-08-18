@@ -1,0 +1,31 @@
+# Golden-master verification
+
+Proves the JS engine (`engine/engine.js`) reproduces the predecessor's Python engine exactly, on real data.
+
+## How it works
+
+1. `export_fixtures.py --db <levi.db> --run <N> --out fixtures/` dumps a recorded valuation run's exact inputs (per-source projection rows, availability prior, league config as the run used it) and expected outputs.
+2. `node run_golden.mjs fixtures/` feeds the same inputs to the JS engine and diffs every player on proj_pts, vbd, dollar, tier, and spread. Exit 0 only at zero mismatches.
+
+## Fixtures are private
+
+Fixture files embed licensed projection data and values derived from it. They are gitignored (`verify/fixtures*/`) and must never be committed. Reproduce verification against your own database.
+
+## Verified results (2026-08-18)
+
+All six recorded 2026 runs pass at zero diff across all rows and fields:
+
+| Run | Source | Rows |
+|---|---|---|
+| 14 | sleeper | pass |
+| 15 | fantasypros | pass |
+| 16 | espn | pass |
+| 17 | cbs | pass |
+| 18 | dell (rank-implied) | pass |
+| 19 | blend (5-source ensemble) | 624 rows, pass |
+
+Porting traps the harness caught (kept as regression knowledge):
+
+* Python `round()` is ties-to-even; `Math.round` is not. Integer rounding uses an explicit half-to-even (`pyRound`).
+* Python `round(x, 1)` rounds the exact binary value; pre-scaling by 10 in JS misrounds near-half values. `toFixed` is correctly rounded, but breaks exact ties upward, and exact ties DO occur (binary-representable x.25 spreads appeared in real data). `round1` detects the odd-quarter case and applies ties-to-even.
+* Tie order in sorts matters; both engines rely on stable sorts (guaranteed in JS since ES2019).
