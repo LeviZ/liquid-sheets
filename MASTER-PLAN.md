@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phase 0 COMPLETE (2026-08-18, pending only the GitHub push). Next: Phase 1.
+Status: ACTIVE. Phase 0 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Next: Phase 1.
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
