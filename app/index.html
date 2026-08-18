@@ -19,10 +19,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 header {
-  display: flex; align-items: baseline; gap: 12px;
-  padding: 14px 20px; border-bottom: 2px solid var(--ink);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px; border-bottom: 2px solid var(--ink);
 }
 header h1 { font-size: 20px; letter-spacing: 0.5px; }
+.titlebox { display: flex; flex-direction: column; }
+.titlebox .sub { font-size: 11px; color: var(--dim); cursor: help; }
 header .ver { color: var(--dim); font-size: 11px; }
 .gearwrap { position: relative; }
 #gearbtn { display: inline-flex; align-items: center; padding: 7px 9px; }
@@ -123,7 +125,14 @@ textarea { width: 100%; font: inherit; padding: 8px;
 .row.colhead .usd { font-weight: normal; }
 .row.subhead { background: var(--line); color: var(--ink); font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.5px; }
-.tiercut { border-top: 2px solid var(--ink); opacity: 0.35; }
+.cutrow, .baserow { display: flex; align-items: center; gap: 8px;
+  padding: 1px 8px; font-size: 9px; letter-spacing: 1px;
+  color: var(--dim); }
+.cutrow::before, .cutrow::after, .baserow::before, .baserow::after {
+  content: ""; flex: 1; border-top: 2px solid var(--ink); opacity: 0.3; }
+.baserow { font-weight: bold; color: var(--ink); padding: 3px 8px; }
+.baserow::before, .baserow::after { border-top: 3px solid var(--ink);
+  opacity: 0.55; }
 .empty { text-align: center; margin-top: 10vh; color: var(--dim); }
 .empty button { margin-top: 14px; }
 [data-tip] { position: relative; cursor: help; }
@@ -141,8 +150,11 @@ textarea { width: 100%; font: inherit; padding: 8px;
 </head>
 <body>
 <header>
-  <h1>Liquid Sheets</h1>
-  <span class="ver">V5 (M2)</span>
+  <div class="titlebox">
+    <h1>Liquid Sheets</h1>
+    <div id="spendline" class="sub" hidden></div>
+  </div>
+  <span class="ver">V6 (M2)</span>
   <span class="right gearwrap">
     <button id="gearbtn" class="ghost" aria-label="Menu">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>

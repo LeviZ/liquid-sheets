@@ -557,36 +557,28 @@ function renderBoard() {
   const run = doc.runs[doc.runs.length - 1];
 
   const bar = el("div", "topbar");
+  const spend = $("#spendline");
   if (run) {
-    const chip = (text, tip) => {
-      const c = el("span", "chip", text);
-      c.dataset.tip = tip;
-      bar.appendChild(c);
-    };
-    chip(`run ${run.run_id} (${run.source_label}) ${run.as_of}`,
-      "Every dollar on this board traces to this numbered engine run: " +
-      "which projections it used and when they were fetched.");
-    chip(`premium $${run.meta.premium}`,
-      "The money that buys value: all league dollars minus $1 per roster " +
-      "spot, split among players by how far they sit above replacement.");
-    chip("baselines " + POSITIONS.map((p) => `${p}${run.meta.baselines[p]}`)
-      .join(" "),
-      "Replacement level per position: the positional rank where value " +
-      "reaches $1 (last starter plus a bench share). VBD measures points " +
-      "above this player.");
-  }
-  const srcNames = Object.keys(doc.sources);
-  if (srcNames.length) {
     const c = el("span", "chip",
-      `sources: ${srcNames.map((s) => `${s}@${doc.sources[s].as_of}`)
-        .join(", ")}`);
-    c.dataset.tip = "Projection sources loaded. More than one and the " +
-      "board runs on their stat-by-stat average (the blend).";
+      run.source_label === "blend"
+        ? `run ${run.run_id}: blend of ${run.as_of}`
+        : `run ${run.run_id}: ${run.as_of}`);
+    c.dataset.tip = "Every dollar on this board traces to this numbered " +
+      "engine run: which projections it used and when they were fetched. " +
+      "With more than one source, a run is their stat-by-stat blend.";
     bar.appendChild(c);
+    const total = doc.league.teams * doc.league.budget;
+    spend.hidden = false;
+    spend.textContent = `total board spend $${total}`;
+    spend.dataset.tip = `All the money in your auction. $${run.meta.premium} ` +
+      "of it buys value above the $1 floors; the rest is reserved as $1 " +
+      "minimums across every roster spot.";
+  } else {
+    spend.hidden = true;
   }
   const spacer = el("span", "spacer");
   bar.appendChild(spacer);
-  const add = el("button", "ghost", "Add Sources");
+  const add = el("button", "ghost", "Add Source");
   add.onclick = () => { importState = { kind: "values" }; renderImport(); };
   bar.appendChild(add);
   const reset = el("button", "ghost danger", "Reset");
@@ -654,12 +646,22 @@ function renderBoard() {
     headerRow(table);
     const group = run.players.filter((p) => p.pos === pos)
       .sort((a, b) => b.dollar - a.dollar).slice(0, 40);
-    let lastTier = null;
-    for (const p of group) {
-      if (lastTier !== null && p.tier !== lastTier) {
-        table.appendChild(el("div", "tiercut"));
+    const baseRank = run.meta.baselines[pos];
+    for (let i = 0; i < group.length; i++) {
+      const p = group[i];
+      const rank = i + 1;
+      if (rank === baseRank + 1) {
+        const b = el("div", "baserow", "BASELINE");
+        b.dataset.tip = "Replacement level: the engine expects a starter " +
+          "of this caliber to be findable for $1. Value is measured as " +
+          "points above this line.";
+        table.appendChild(b);
       }
-      lastTier = p.tier;
+      // Tier cuts are gap-based; below the baseline everyone is $1 and
+      // the cuts would be noise, so they stop there.
+      if (i > 0 && p.tier !== group[i - 1].tier && rank <= baseRank) {
+        table.appendChild(el("div", "cutrow", `TIER ${p.tier}`));
+      }
       const row = el("div", "row");
       row.appendChild(el("span", "nm", doc.names[p.player_id] ?? p.player_id));
       row.appendChild(el("span", "pts", p.proj_pts.toFixed(0)));
