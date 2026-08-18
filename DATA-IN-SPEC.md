@@ -1,6 +1,6 @@
 # Data-In Specification
 
-Status: **PROPOSED** (drafted 2026-08-18, awaiting Levi's review of the named decision points at the bottom).
+Status: **RATIFIED** (2026-08-18, by Levi; all four decision points confirmed as proposed). Changes now require a note in the MASTER-PLAN.md learnings log.
 Parent: [MASTER-PLAN.md](MASTER-PLAN.md) Phase 2. Scope authority: [PRODUCT-SCOPE.md](PRODUCT-SCOPE.md).
 
 ## The premise that makes everything legal
@@ -91,9 +91,9 @@ Jordan is in a 10-team, $300 ESPN auction league, half PPR, and has never heard 
 
 Every step above is covered by a section of this spec; nothing relies on unbuilt magic beyond the app itself.
 
-## Named decision points for Levi
+## Decision points (all ratified by Levi, 2026-08-18)
 
-1. **ESPN kona script in the power kit**: proposed YES on public precedent, personal-use framing. Veto if the risk feels wrong.
-2. **CBS scraper in the power kit**: proposed NO (Path C covers CBS users). Confirm.
-3. **Column-mapper-first philosophy**: presets are conveniences in front of one universal mapper. This is the biggest new design commitment beyond the predecessor. Confirm.
-4. **Deal column hidden (not zeroed) without pasted values**: confirm the honest-absence behavior.
+1. **ESPN kona script in the power kit**: YES, on public precedent, personal-use framing.
+2. **CBS scraper in the power kit**: NO. Path C covers CBS users.
+3. **Column-mapper-first philosophy**: YES. Presets are conveniences in front of one universal mapper.
+4. **Deal column hidden (not zeroed) without pasted values**: YES. Honest-absence behavior confirmed.

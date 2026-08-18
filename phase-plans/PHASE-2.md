@@ -1,6 +1,6 @@
 # Phase 2 Execution Plan: Data-in design
 
-Status: IN PROGRESS (opened 2026-08-18)
+Status: COMPLETE (2026-08-18). [DATA-IN-SPEC.md](../DATA-IN-SPEC.md) ratified with all four decision points confirmed as proposed. Exit gate met via the zero-to-board walkthrough.
 Parent: [MASTER-PLAN.md](../MASTER-PLAN.md)
 
 ## Inherited from Phase 1

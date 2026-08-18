@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phases 0 and 1 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope is ratified in PRODUCT-SCOPE.md. Next: Phase 2 (data-in design).
+Status: ACTIVE. Phases 0 through 2 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope ratified in PRODUCT-SCOPE.md; data-in ratified in DATA-IN-SPEC.md. Next: Phase 3 (engine port and verification).
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
@@ -138,3 +138,11 @@ Appended at each phase exit.
 - Full triage ratified in PRODUCT-SCOPE.md on the first review pass with only two amendments, both in the direction of a LEANER v1: my_calls went from generalized to deferred, and the co-pilot question resolved into "one app plus a post-launch power kit" (ADR-0004) rather than a second app version. Lesson: when Levi amends, he cuts; propose lean and let him add.
 - The power kit pattern is the durable invention of this phase: the app never ships AI content or scrapers, but the repo can publish the prompts and personal-use scripts as a post-launch encore, with an import hook in v1 so kit output flows in. It converts a liability (shipped AI takes) into portfolio material (published prompts).
 - Handed to Phase 2: the per-source licensing review now covers three things: data-in paths for the app, the shipped availability-prior aggregate, and which power-kit scripts (public-API pulls vs. scrapers) may be published. Also inherited: the wizard scope list at the bottom of PRODUCT-SCOPE.md, the one-source floor requirement, and the opinions/tags import format as a real deliverable, not an afterthought.
+
+### Phase 2 (closed 2026-08-18)
+
+- The phase's biggest fact came from a two-second curl, not from reasoning: Sleeper's API sends `access-control-allow-origin: *`, so the browser fetches directly and the product floor upgraded from "paste a CSV" to "one click." Lesson: empirically test the cheap-to-test assumptions before designing around their absence.
+- The column mapper became the load-bearing design decision: one universal import preview with platform presets in front. It converts annual format drift (a certainty) from "app broken in August" to "user confirms two dropdowns." For a static app with no hotfix channel, this is survival, not polish.
+- The licensing question largely dissolved once stated correctly: a static app means data never transits us, so paste paths are personal use by construction. Remaining calls were made cleanly: ESPN kona script publishes in the kit (public precedent), CBS scraper does not, availability prior ships as an attributed aggregate of openly licensed data.
+- Ratification pattern held from Phase 1: all four proposals confirmed without amendment. Propose-lean continues to work.
+- Handed to Phase 3: the engine port scope now explicitly includes the rank-implied converter and the availability prior as a shipped artifact; the wizard's step-7 config JSON is the engine's input shape; the golden-master harness compares against the private tool's runs 14-20 dataset.
