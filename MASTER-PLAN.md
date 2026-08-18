@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phases 0 through 2 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope ratified in PRODUCT-SCOPE.md; data-in ratified in DATA-IN-SPEC.md. Next: Phase 3 (engine port and verification).
+Status: ACTIVE. Phases 0 through 3 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope in PRODUCT-SCOPE.md; data-in in DATA-IN-SPEC.md; engine ported and golden-master verified (engine/, verify/). Next: Phase 4 (draft room generalization).
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
@@ -146,3 +146,10 @@ Appended at each phase exit.
 - The licensing question largely dissolved once stated correctly: a static app means data never transits us, so paste paths are personal use by construction. Remaining calls were made cleanly: ESPN kona script publishes in the kit (public precedent), CBS scraper does not, availability prior ships as an attributed aggregate of openly licensed data.
 - Ratification pattern held from Phase 1: all four proposals confirmed without amendment. Propose-lean continues to work.
 - Handed to Phase 3: the engine port scope now explicitly includes the rank-implied converter and the availability prior as a shipped artifact; the wizard's step-7 config JSON is the engine's input shape; the golden-master harness compares against the private tool's runs 14-20 dataset.
+
+### Phase 3 (closed 2026-08-18)
+
+- The port passed the golden master at zero diff on all six recorded 2026 runs on the first substantive iteration; the engine really was ~150 lines of portable math. The phase's entire difficulty concentrated in rounding semantics: Python rounds the exact binary value with ties-to-even, JS does neither by default, and real data produced actual exact .25 ties that a "vanishingly unlikely" assumption had waved off. Lesson: the golden master is the argument-settler; write the harness before the port, and never accept a probabilistic claim about numerics when an exhaustive check is this cheap.
+- Fixtures embed licensed data, so the harness is public but its inputs are generated locally and gitignored. This split (public method, private data) is the same pattern as the whole product and will recur in the power kit.
+- Storage decided (ADR-0005): plain structures over IndexedDB with a one-file JSON export/import as the recovery ritual; sql.js and localStorage rejected. Doctrine survives structurally (append-only runs and journal), not by database enforcement.
+- Handed to Phase 4: the engine module's exact API (blendProjections, valueBoard, config shape) is now fixed and verified; the UI build consumes it as-is. Phase 4 also owns the ADR-0005 acceptance tests (tab-kill reopen; delete-data then import-file) and the airplane-mode PWA test.

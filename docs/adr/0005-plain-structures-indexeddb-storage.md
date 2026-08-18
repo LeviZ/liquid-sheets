@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-18
 decision-makers: Levi Zortman
 consulted: []
@@ -48,6 +48,6 @@ Phase 4 acceptance includes: kill the tab mid-draft, reopen, and the board repro
 
 ## Approval Checklist
 
-- [ ] Reviewed by: Levi Zortman
-- [ ] Approved by: Levi Zortman
-- [ ] Status updated to accepted
+- [x] Reviewed by: Levi Zortman (working session, 2026-08-18)
+- [x] Approved by: Levi Zortman
+- [x] Status updated to accepted

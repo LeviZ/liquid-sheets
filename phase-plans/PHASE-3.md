@@ -1,6 +1,6 @@
 # Phase 3 Execution Plan: Engine port and verification
 
-Status: CODE COMPLETE (2026-08-18). Golden master: zero diff on all six recorded 2026 runs (14-19), 624 rows on the blend. Exit gate exceeded (gate required the blend run only). Remaining: Levi ratifies [ADR-0005](../docs/adr/0005-plain-structures-indexeddb-storage.md) (storage), then close.
+Status: COMPLETE (2026-08-18). Golden master: zero diff on all six recorded 2026 runs (14-19), 624 rows on the blend. Exit gate exceeded (gate required the blend run only). [ADR-0005](../docs/adr/0005-plain-structures-indexeddb-storage.md) (storage) ratified.
 Parent: [MASTER-PLAN.md](../MASTER-PLAN.md)
 
 ## Scope (from ratified PRODUCT-SCOPE.md and Phase 2 handoff)
