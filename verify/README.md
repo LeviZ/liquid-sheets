@@ -11,18 +11,10 @@ Proves the JS engine (`engine/engine.js`) reproduces the predecessor's Python en
 
 Fixture files embed licensed projection data and values derived from it. They are gitignored (`verify/fixtures*/`) and must never be committed. Reproduce verification against your own database.
 
-## Verified results (2026-08-18)
+## Verified results
 
-All six recorded 2026 runs pass at zero diff across all rows and fields:
-
-| Run | Source | Rows |
-|---|---|---|
-| 14 | sleeper | pass |
-| 15 | fantasypros | pass |
-| 16 | espn | pass |
-| 17 | cbs | pass |
-| 18 | dell (rank-implied) | pass |
-| 19 | blend (5-source ensemble) | 624 rows, pass |
+2026-08-18: runs 14-19 (five per-source + blend), zero diff on all rows and fields.
+2026-08-19: the predecessor fixed its tier algorithm (cumulative drop from the tier's own top, replacing the adjacent-gap rule that left smooth positions in one giant tier) and regenerated runs 21-30. The fix was ported and runs 24-29 (five per-source + blend) verified at zero diff on all rows and fields, tiers included.
 
 Porting traps the harness caught (kept as regression knowledge):
 

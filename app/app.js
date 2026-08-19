@@ -730,7 +730,7 @@ function skillCol(pos) {
   const dealCols = doc.market ? `<span class="r sortable${sortBy === "deal" ? " on" : ""}" data-sort="deal" title="DEAL: our value minus what the room's market pays (rescaled to your league's money). Green +3: likely bargain. Red -5: the market pays past our value. CLICK to sort by deal.">deal</span>` : `<span></span>`;
   col.innerHTML =
     `<div class="colhead"><div class="t1"><span class="${posClass(pos)}" title="Position column. Values are computed against replacement baseline ${pos}${base}: the best player assumed freely available.">${pos}</span></div>
-     <div class="t2 grid-skill"><span title="tier: players within noise of each other. A new tier starts where the value gap exceeds 20% of the position's top value.">T</span><span>player</span>
+     <div class="t2 grid-skill"><span title="tier: players whose values sit within noise of each other. A tier ends once value has fallen 20% below that tier's own top - one rule that catches both hard cliffs and slow slides. The horizontal rule marks each break.">T</span><span>player</span>
        <span class="pts" title="projected season points under YOUR league scoring">pts</span>
        ${dealCols}
        <span class="r sortable${sortBy === "usd" ? " on" : ""}" data-sort="usd" title="our auction value for this league: the most you should be willing to pay. CLICK to sort by value.">our$</span></div></div>`;

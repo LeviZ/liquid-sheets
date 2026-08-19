@@ -75,13 +75,21 @@ export function baselines(cfg, mp = cfg.model_params) {
   return out;
 }
 
+/* A tier is "players within noise of each other": it ends once value has
+ * fallen theta (cumulative) below the TIER'S OWN TOP. Adjacent-gap rules
+ * can never break a smoothly declining position (every RB sat in tier 1:
+ * no single $3-6 step is a cliff, but forty of them are). Ported from the
+ * predecessor's 2026-08-19 fix; verified against its regenerated runs. */
 export function gapTiers(vbds, theta) {
   if (!vbds.length) return [];
-  const maxVbd = Math.max(vbds[0], 1e-9);
   const tiers = [1];
   let t = 1;
+  let tierTop = Math.max(vbds[0], 1e-9);
   for (let i = 1; i < vbds.length; i++) {
-    if (vbds[i - 1] - vbds[i] > theta * maxVbd) t += 1;
+    if (tierTop - vbds[i] > theta * tierTop) {
+      t += 1;
+      tierTop = Math.max(vbds[i], 1e-9);
+    }
     tiers.push(t);
   }
   return tiers;
