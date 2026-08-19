@@ -93,6 +93,12 @@ Deliverables: the working app, offline-verified, driven entirely by wizard-produ
 
 Exit gate: two fictional leagues with different sizes, budgets, and scoring run correct side-by-side drafts.
 
+### Phase 4B: Liquid Workflows brand pass (added 2026-08-19)
+
+Goal: the public app adopts the Liquid Workflows brand identity, distinct from the personal tool's paper-ledger look. Inputs: the brand kit at `claude-projects/liquid-workflows/projects/personal-brand/assets/color-type/` (tokens.css, brand-theme-kit.html, tailwind.config.js, logos/icons). Runs AFTER Phase 4's token-architecture port so the brand maps onto tokens rather than hardcoded colors. Execution plan written when entered. Scope sketch and sequencing rationale: [phase-plans/UI-CARRYOVER.md](phase-plans/UI-CARRYOVER.md).
+
+Exit gate: the app, landing surface, and favicon read as one Liquid Workflows product in every theme.
+
 ### Phase 5: Packaging and launch surface
 
 Goal: everything around the app.
