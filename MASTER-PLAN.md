@@ -1,6 +1,6 @@
 # Liquid Sheets Public - Master Plan
 
-Status: ACTIVE. Phases 0 through 3 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope in PRODUCT-SCOPE.md; data-in in DATA-IN-SPEC.md; engine ported and golden-master verified (engine/, verify/). Next: Phase 4 (draft room generalization).
+Status: ACTIVE. Phases 0 through 3 COMPLETE (2026-08-18). Public repo: https://github.com/LeviZ/liquid-sheets. Scope in PRODUCT-SCOPE.md; data-in in DATA-IN-SPEC.md; upstream workflow in docs/UPSTREAM.md; engine ported and golden-master verified (engine/, verify/). Next: Phase 4 (draft room generalization).
 Created: 2026-08-17. This is the high-level roadmap only. Each phase gets its own dedicated execution plan written at the moment we enter that phase, never earlier, because each phase produces learnings that reshape the next one.
 
 ## What we are building
