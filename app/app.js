@@ -195,7 +195,7 @@ function stepData(body, nav) {
     try {
       await finishWizard();
       await doFetchSleeper();
-      renderBoard();
+      renderBoardScreen();
     } catch (e) {
       msg.textContent = `Fetch failed (${e.message}). If you are offline, ` +
         "reconnect and try again; the wizard settings are saved.";
@@ -206,7 +206,7 @@ function stepData(body, nav) {
   body.appendChild(msg);
   navButtons(nav, {
     next: "Skip for now",
-    onNext: async () => { await finishWizard(); renderBoard(); },
+    onNext: async () => { await finishWizard(); renderBoardScreen(); },
   });
 }
 
@@ -301,7 +301,7 @@ function boardRoster() {
 function renderImport() {
   const root = $("#main");
   root.innerHTML = "";
-  const panel = el("div", "panel");
+  const panel = el("div", "bigpanel");
   root.appendChild(panel);
   panel.appendChild(el("h2", null, "Add data"));
   panel.appendChild(el("p", "hint",
@@ -336,7 +336,7 @@ function renderImport() {
   panel.appendChild(msg);
   const nav = el("div", "wiznav");
   const cancel = el("button", "ghost", "Cancel");
-  cancel.onclick = () => { importState = null; renderBoard(); };
+  cancel.onclick = () => { importState = null; renderBoardScreen(); };
   nav.appendChild(cancel);
   const prev = el("button", "primary", "Preview");
   prev.onclick = () => {
@@ -363,7 +363,7 @@ function setMapping() {
 function renderMapper() {
   const root = $("#main");
   root.innerHTML = "";
-  const panel = el("div", "panel wide");
+  const panel = el("div", "bigpanel wide");
   root.appendChild(panel);
   const { parsed, mapping, kind } = importState;
   panel.appendChild(el("h2", null,
@@ -465,7 +465,7 @@ function renderMapper() {
 function renderUnmatched() {
   const root = $("#main");
   root.innerHTML = "";
-  const panel = el("div", "panel");
+  const panel = el("div", "bigpanel");
   root.appendChild(panel);
   panel.appendChild(el("h2", null,
     `${importState.unmatched.length} rows did not match a player`));
@@ -543,7 +543,7 @@ async function finishImport() {
       reference = doc.sources[srcNames[0]].players;
     } else {
       alert("Fetch or import projections first; rankings need a curve to map onto.");
-      importState = null; renderBoard(); return;
+      importState = null; renderBoardScreen(); return;
     }
     const withPos = matched.map((m) => ({ ...m, pos: posOf.get(m.pid) }))
       .filter((m) => m.pos);
@@ -554,105 +554,604 @@ async function finishImport() {
   }
   await saveDoc(doc);
   importState = null;
-  renderBoard();
+  renderBoardScreen();
 }
 
 /* --------------------------------------------------------------- board */
 
-let stagedPid = null;
-let rosterView = 0;
+/* ------------------------------------------------------------ the room
+ * Ported from the original (levi-sheet/draftroom/app.html V36): same DOM
+ * shape, same CSS, same interaction grammar. Data access adapted from its
+ * server state to our local doc; everything else moves faithfully. */
 
-function searchPool(run) {
-  const pool = run.players.map((p) => ({ pid: p.player_id, pos: p.pos,
-    dollar: p.dollar, name: doc.names[p.player_id] ?? p.player_id }));
+let P = [], byId = {}, soldSet = new Set(), soldBy = {};
+let hitList = [], hitSel = 0, picked = null, selOwner = null;
+let stagedId = null, rosterView = null, showTeams = false, kdefView = "K";
+let sortBy = localStorage.getItem("ls-sort") || "usd";
+let mScale = 1;
+let curRun = null, curSales = [];
+
+const fmt$ = (v) => v == null ? "" : "$" + Math.round(v);
+const posClass = (l) => ({ QB: "pQB", RB: "pRB", WR: "pWR", TE: "pTE",
+  K: "pK", DEF: "pDEF" }[l] || "");
+const owners = () => doc.league.team_names.map((name, i) =>
+  ({ id: i, name, is_me: i === 0 }));
+const short = (o) => o.is_me ? "ME"
+  : o.name.split(" ")[0].slice(0, 4).toUpperCase();
+
+window.onerror = (m, src, l) => { const e = $("#errbar");
+  e.style.display = "block";
+  e.textContent = "UI ERROR (screenshot this): " + m + " @line " + l; };
+window.onunhandledrejection = (ev) => { const e = $("#errbar");
+  e.style.display = "block";
+  e.textContent = "UI ERROR (screenshot this): " + ev.reason; };
+
+function slotOrder() {
+  const r = doc.league.full_roster;
+  const out = [];
+  for (const pos of ["QB", "RB", "WR", "TE"]) {
+    for (let i = 0; i < (r[pos] ?? 0); i++) out.push(pos);
+  }
+  for (let i = 0; i < (r.FLEX ?? 0); i++) out.push("FLX");
+  for (const pos of ["K", "DEF"]) {
+    for (let i = 0; i < (r[pos] ?? 0); i++) out.push(pos);
+  }
+  for (let i = 0; i < (r.BN ?? 0); i++) out.push("BN");
+  return out;
+}
+
+function buildModel() {
+  curRun = doc.runs[doc.runs.length - 1] ?? null;
+  curSales = activeSales(doc.journal);
+  soldSet = new Set(curSales.map((s) => s.pid));
+  soldBy = {}; curSales.forEach((s) => { soldBy[s.pid] = s; });
+  const mv = doc.market?.values ?? null;
+  P = [];
+  if (curRun) {
+    for (const p of curRun.players) {
+      const meta = doc.player_meta[p.player_id] ?? {};
+      P.push({ id: p.player_id, name: doc.names[p.player_id] ?? p.player_id,
+        pos: p.pos, team: p.team, pts: p.proj_pts, usd: p.dollar,
+        tier: p.tier, inj: meta.injury_status, rookie: meta.is_rookie,
+        y_avg: mv ? mv[p.player_id] ?? null : null });
+    }
+    mScale = mv ? marketScale(curRun.players, mv,
+      doc.league.teams * doc.league.model_params.dollar_slots_per_team) : 1;
+  }
   if (doc.kdef) {
     for (const p of doc.kdef.players) {
-      pool.push({ pid: p.player_id, pos: p.pos, dollar: 1,
-        name: doc.names[p.player_id] ?? p.player_id });
+      P.push({ id: p.player_id, name: doc.names[p.player_id] ?? p.player_id,
+        pos: p.pos, team: p.team, pts: p.pts, usd: null, tier: null,
+        y_avg: mv ? mv[p.player_id] ?? null : null, kd: true });
     }
   }
-  return pool;
+  byId = {}; P.forEach((p) => { byId[p.id] = p; });
+}
+
+const dealOf = (p) => (doc.market && p.usd != null && p.y_avg != null)
+  ? p.usd - p.y_avg * mScale : null;
+
+/* ledger states in the original's field names */
+function oStates() {
+  return ownerStates(doc.league, curSales).map((o) => ({
+    id: o.idx, name: o.name, is_me: o.idx === 0, spent: o.spent,
+    left: o.remaining, open: o.spotsLeft, max: o.maxBid }));
+}
+
+/* inflation, ported: money over owners with open spots, value over the
+ * top spotsLeft unsold players */
+function inflation() {
+  const os = oStates();
+  const money = os.reduce((a, o) => a + (o.open > 0 ? o.left : 0), 0);
+  const spotsLeft = os.reduce((a, o) => a + Math.max(o.open, 0), 0);
+  const vals = P.filter((p) => !soldSet.has(p.id))
+    .map((p) => Math.max(p.usd || 1, 1)).sort((a, b) => b - a)
+    .slice(0, spotsLeft);
+  const value = vals.reduce((a, b) => a + b, 0);
+  return { money, value, ratio: value > 0 ? money / value : 1 };
+}
+
+function ownerNeedMap() {
+  const r = doc.league.full_roster;
+  const base = { QB: r.QB ?? 0, RB: r.RB ?? 0, WR: r.WR ?? 0, TE: r.TE ?? 0,
+    FLX: r.FLEX ?? 0, K: r.K ?? 0, DEF: r.DEF ?? 0, BN: r.BN ?? 0 };
+  const map = {};
+  owners().forEach((o) => { map[o.id] = { ...base }; });
+  curSales.forEach((s) => {
+    const p = byId[s.pid]; if (!p) return;
+    const n = map[s.owner]; if (!n) return;
+    if (n[p.pos] > 0) n[p.pos]--;
+    else if (["RB", "WR", "TE"].includes(p.pos) && n.FLX > 0) n.FLX--;
+    else n.BN--;
+  });
+  return map;
+}
+
+/* BeerSheets-style surplus shading (ported, incl. sqrt scale) */
+function surplusBg(ourVal, price) {
+  const d = (ourVal == null ? 1 : ourVal) - price;
+  if (Math.abs(d) < 0.5) return "";
+  const t = Math.sqrt(Math.min(Math.abs(d), 20) / 20);
+  const dark = !!document.documentElement.dataset.theme &&
+    document.documentElement.dataset.theme !== "focus";
+  const a = (dark ? 0.08 : 0.05) + t * (dark ? 0.40 : 0.36);
+  return d > 0
+    ? (dark ? `rgba(102,189,143,${a.toFixed(2)})` : `rgba(13,107,70,${a.toFixed(2)})`)
+    : (dark ? `rgba(224,133,99,${a.toFixed(2)})` : `rgba(166,58,48,${a.toFixed(2)})`);
+}
+
+function stampShow(big, small) {
+  const s = $("#stamp");
+  s.innerHTML = `${big}<small>${small}</small>`;
+  s.classList.remove("show"); void s.offsetWidth; s.classList.add("show");
+  clearTimeout(s._t); s._t = setTimeout(() => s.classList.remove("show"), 1600);
+}
+
+/* ---------------- board columns (ported) ---------------- */
+
+function addRow(p, target, kdef) {
+  const sold = soldSet.has(p.id), sale = soldBy[p.id];
+  const winner = sale && owners()[sale.owner];
+  const edge = dealOf(p);
+  const row = el("div", "row " + (kdef ? "grid-kdef" : "grid-skill")
+    + (sold ? " sold" : "")
+    + (p.id === stagedId && !sold ? " staged" : ""));
+  row.dataset.id = p.id;
+  if (sold) row.style.background = surplusBg(kdef ? 1 : p.usd, sale.price);
+  if (kdef) {
+    row.innerHTML = `<span class="nm">${p.name}</span>`
+      + (sold ? `<span class="mkt">${fmt$(sale.price)} ${short(winner)}</span>`
+        : `<span class="mkt">${p.y_avg != null ? fmt$(p.y_avg) : "$1"}</span>`);
+  } else {
+    row.innerHTML =
+      `<span class="tier">${p.tier ?? ""}</span>`
+      + `<span class="nm">${p.name}<span class="tm">${p.team || ""}</span>`
+      + (p.inj ? `<span class="inj" title="${p.inj}">+</span>` : "")
+      + (p.rookie ? `<span class="rk" title="rookie">R</span>` : "") + `</span>`
+      + `<span class="pts">${p.pts != null ? Math.round(p.pts) : ""}</span>`
+      + (sold
+        ? `<span class="edge"></span><span class="usd">${fmt$(sale.price)} ${short(winner)}</span>`
+        : `<span class="edge ${edge > 2 ? "up" : edge < -2 ? "dn" : ""}">${edge == null ? "" : (edge > 0 ? "+" : "") + Math.round(edge)}</span>`
+          + `<span class="usd">${fmt$(p.usd)}</span>`);
+  }
+  /* single click = popup; double click = nominate (ported timing trick) */
+  row.onclick = () => {
+    if (sold) { openModal(p.id); return; }
+    clearTimeout(row._t);
+    row._t = setTimeout(() => openModal(p.id), 260);
+  };
+  row.ondblclick = () => { if (!sold) { clearTimeout(row._t); pick(p.id); } };
+  target.appendChild(row);
+}
+
+function skillCol(pos) {
+  const col = el("div", "poscol");
+  const base = curRun.meta.baselines[pos] ?? "";
+  const dealCols = doc.market ? `<span class="r sortable${sortBy === "deal" ? " on" : ""}" data-sort="deal" title="DEAL: our value minus what the room's market pays (rescaled to your league's money). Green +3: likely bargain. Red -5: the market pays past our value. CLICK to sort by deal.">deal</span>` : `<span></span>`;
+  col.innerHTML =
+    `<div class="colhead"><div class="t1"><span class="${posClass(pos)}" title="Position column. Values are computed against replacement baseline ${pos}${base}: the best player assumed freely available.">${pos}</span></div>
+     <div class="t2 grid-skill"><span title="tier: players within noise of each other. A new tier starts where the value gap exceeds 20% of the position's top value.">T</span><span>player</span>
+       <span class="pts" title="projected season points under YOUR league scoring">pts</span>
+       ${dealCols}
+       <span class="r sortable${sortBy === "usd" ? " on" : ""}" data-sort="usd" title="our auction value for this league: the most you should be willing to pay. CLICK to sort by value.">our$</span></div></div>`;
+  col.querySelectorAll(".sortable").forEach((s) => {
+    s.onclick = (e) => { e.stopPropagation(); sortBy = s.dataset.sort;
+      localStorage.setItem("ls-sort", sortBy); renderBoard(); };
+  });
+  const wrap = el("div", "rows");
+  let group = P.filter((p) => p.pos === pos && p.usd != null);
+  group.sort((a, b) => b.usd - a.usd);
+  if (sortBy === "deal") {
+    group = [...group].sort((a, b) =>
+      ((dealOf(b) ?? -999) - (dealOf(a) ?? -999)));
+  }
+  const above = group.filter((p) => (p.usd || 0) >= 2);
+  const free = group.filter((p) => (p.usd || 0) < 2);
+  let lastTier = null;
+  const rowWithTier = (p, target) => {
+    addRow(p, target, false);
+    if (sortBy !== "deal" && p.tier !== lastTier && lastTier !== null) {
+      target.lastChild.classList.add("t-open");
+    }
+    lastTier = p.tier;
+  };
+  above.forEach((p) => rowWithTier(p, wrap));
+  col.appendChild(wrap);
+  if (free.length) {
+    const bar = el("div", "freebar");
+    bar.title = "the replacement line: everyone below prices at $1 - never bid $2";
+    bar.innerHTML = `<span></span>&#9660; FREE &#9660;<span></span>`;
+    col.appendChild(bar);
+    if (freeExpanded[pos]) {
+      const tail = el("div", "rows");
+      free.forEach((p) => rowWithTier(p, tail));
+      col.appendChild(tail);
+    }
+    const more = el("button", "more",
+      freeExpanded[pos] ? "- collapse" : `+ ${free.length} more..`);
+    more.onclick = (e) => { e.stopPropagation();
+      freeExpanded[pos] = !freeExpanded[pos]; renderBoard(); };
+    col.appendChild(more);
+  }
+  return col;
+}
+
+function kdefCol() {
+  const col = el("div", "poscol");
+  col.innerHTML =
+    `<div class="colhead"><div class="t1">
+       <span class="kd pK${kdefView === "K" ? " on" : ""}" data-kd="K" title="show kickers">K</span> /
+       <span class="kd pDEF${kdefView === "DEF" ? " on" : ""}" data-kd="DEF" title="show defenses">DEF</span>
+       <small title="the model prices every K and DEF at $1">$1 rule</small></div>
+     <div class="t2 grid-kdef"><span>player</span><span class="r" title="market average salary, when you have pasted values">mkt$</span></div></div>`;
+  col.querySelectorAll(".kd").forEach((s) => {
+    s.onclick = (e) => { e.stopPropagation(); kdefView = s.dataset.kd;
+      renderBoard(); };
+  });
+  const wrap = el("div", "rows");
+  P.filter((p) => p.pos === kdefView)
+    .sort((a, b) => (b.y_avg || b.pts || 0) - (a.y_avg || a.pts || 0))
+    .slice(0, 34)
+    .forEach((p) => addRow(p, wrap, true));
+  col.appendChild(wrap);
+  return col;
 }
 
 function renderBoard() {
+  const board = $("#board");
+  if (!board) return;
+  board.innerHTML = "";
+  POSITIONS.forEach((pos) => board.appendChild(skillCol(pos)));
+  if (doc.kdef && doc.kdef.players.length) board.appendChild(kdefCol());
+}
+
+/* ---------------- rail renders (ported) ---------------- */
+
+function renderOwners() {
+  const os = [...oStates()].sort((a, b) => b.left - a.left);
+  $("#ownerbody").innerHTML = os.map((o) =>
+    `<div class="orow${o.is_me ? " me" : ""}${o.max <= 1 ? " out" : ""}">
+      <span>${o.name}</span>
+      <span class="m g">$${o.left}</span>
+      <span class="m">$${Math.max(o.max, 0)}</span>
+      <span class="sp">${o.open}</span></div>`).join("");
+  renderOwnerGrid();
+}
+
+function renderOwnerGrid() {
+  const grid = $("#ogrid");
+  if (!grid) return;
+  const os = oStates();
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+  grid.innerHTML = os.map((o, i) =>
+    `<button class="obtn${o.is_me ? " me" : ""}${o.max <= 1 ? " out" : ""}${selOwner === o.id ? " selected" : ""}"
+      data-oid="${o.id}" title="${o.name} (key: ${keys[i] ?? ""})"><span>${o.name}</span><small>$${o.left}</small></button>`).join("");
+  grid.querySelectorAll(".obtn").forEach((b) =>
+    b.onclick = () => selectOwner(+b.dataset.oid));
+}
+
+function ownerSlots(oid) {
+  const theirs = curSales.filter((s) => s.owner === oid)
+    .map((s) => ({ ...(byId[s.pid] ?? { name: s.name, pos: s.pos }),
+      price: s.price }));
+  const slots = slotOrder().map((l) => ({ lab: l, who: null, price: null }));
+  const fits = { QB: ["QB"], RB: ["RB"], WR: ["WR"], TE: ["TE"], K: ["K"],
+    DEF: ["DEF"] };
+  theirs.forEach((p) => {
+    const s = slots.find((x) => !x.who && (fits[p.pos] || []).includes(x.lab))
+      || (["RB", "WR", "TE"].includes(p.pos)
+        ? slots.find((x) => !x.who && x.lab === "FLX") : null)
+      || slots.find((x) => !x.who && x.lab === "BN");
+    if (s) { s.who = p; s.price = p.price; }
+  });
+  return { slots, spent: theirs.reduce((a, p) => a + p.price, 0) };
+}
+
+function renderRoster() {
+  const viewId = rosterView ?? 0;
+  const sel = $("#rostersel");
+  if (document.activeElement !== sel) {
+    sel.innerHTML = owners().map((o) =>
+      `<option value="${o.id}">${o.is_me ? "My Roster" : o.name}</option>`)
+      .join("");
+    sel.value = String(viewId);
+  }
+  const os = ownerSlots(viewId);
+  $("#roster").innerHTML = os.slots.map((s) =>
+    `<div class="slot${s.who ? " filled" : ""}"><span class="lab ${posClass(s.lab)}">${s.lab}</span>
+      <span class="who">${s.who ? s.who.name : ""}</span>
+      <span class="pr">${s.who ? fmt$(s.price) : ""}</span></div>`).join("")
+    + `<div class="slot"><span class="lab"></span><span class="who">spent</span>
+       <span class="pr">$${os.spent} / ${doc.league.budget}</span></div>`;
+}
+
+function renderChips() {
+  const inf = inflation();
+  const infEl = $("#infl");
+  infEl.className = "chip"
+    + (inf.ratio > 1.12 || inf.ratio < 0.88 ? " hot" : "");
+  const pct = Math.max(2, Math.min(98, (inf.ratio - 0.6) / 0.8 * 100));
+  infEl.innerHTML = `<span class="lab">inflation</span>
+    <span class="cval"><b>${inf.ratio.toFixed(2)}</b>
+    <span class="g">$${inf.money}</span><span>/ $${Math.round(inf.value)}</span></span>
+    <span class="gauge" title="dot vs center tick: right of center = money-rich room (overpays coming), left = money drying up (deals coming)"><i style="left:${pct.toFixed(1)}%"></i></span>`;
+  const total = doc.league.teams * rosterSpots(doc.league.full_roster);
+  $("#soldct").innerHTML = `<span class="lab">sold</span>
+    <span class="cval"><b>${curSales.length}</b><span>/${total}</span></span>
+    <span class="bar"><i style="width:${(curSales.length / total * 100).toFixed(1)}%"></i></span>`;
+  const recent = curSales.slice(-5)
+    .map((s) => s.price - Math.max((byId[s.pid] && byId[s.pid].usd) || 1, 1));
+  if (recent.length) {
+    const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const mood = avg > 1 ? "hot" : avg < -1 ? "deals" : "even";
+    const col = avg > 1 ? "var(--warn)" : avg < -1 ? "var(--good)"
+      : "var(--c-text)";
+    $("#heat").innerHTML = `<span class="lab">last 5 sales</span>
+      <span class="cval"><b style="color:${col}">${avg >= 0 ? "+" : "-"}$${Math.abs(avg).toFixed(0)} ${mood}</b></span>
+      <span class="segs">${recent.map((d) =>
+    `<i style="background:${d > 0 ? "var(--bad)" : "var(--good)"};opacity:${(Math.min(Math.abs(d), 12) / 12 * 0.75 + 0.25).toFixed(2)}"></i>`).join("")}</span>`;
+  } else {
+    $("#heat").innerHTML = `<span class="lab">last 5 sales</span><b>none yet</b>`;
+  }
+  const last = curSales[curSales.length - 1];
+  if (last) {
+    $("#lastchip").innerHTML = `<span class="lab">last sale</span>
+      <span class="cval"><b>${last.name}</b><span class="g">${fmt$(last.price)}</span><span>${short(owners()[last.owner])}</span></span>`;
+  } else {
+    $("#lastchip").innerHTML = `<span class="lab">last sale</span><b>none yet</b>`;
+  }
+  const mast = $("#spendline");
+  mast.textContent = `${doc.league.teams} TEAMS X $${doc.league.budget}` +
+    (doc.market ? ` X MARKET ${mScale.toFixed(2)}` : "");
+}
+
+/* ---------------- sale flow (ported) ---------------- */
+
+const normName = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, "");
+
+function search(qs) {
+  const q = normName(qs);
+  if (!q) return [];
+  return P.filter((p) => !soldSet.has(p.id) && normName(p.name).includes(q))
+    .sort((a, b) => ((b.usd || b.y_avg || 0) - (a.usd || a.y_avg || 0)))
+    .slice(0, 8);
+}
+
+function renderHits() {
+  $("#hits").innerHTML = hitList.map((p, i) =>
+    `<button class="hit${i === hitSel ? " sel" : ""}" data-id="${p.id}">
+      <span class="p">${p.pos}</span><span class="n">${p.name} ${p.team || ""}</span>
+      <span class="d">${p.usd != null ? fmt$(p.usd) : "$1"}</span></button>`)
+    .join("");
+  $("#hits").querySelectorAll(".hit").forEach((b) =>
+    b.onclick = () => pick(b.dataset.id));
+}
+
+function pick(pid) {
+  picked = byId[pid]; selOwner = null;
+  hitList = []; renderHits(); $("#q").value = "";
+  const p = picked;
+  $("#picked").style.display = "block";
+  $("#picked").innerHTML = `<div class="pnm">${p.name} <span class="${posClass(p.pos)}">${p.pos}</span> <span style="color:var(--faint)">${p.team || ""}</span>${p.inj ? ' <span style="color:var(--bad);font-size:12px">' + p.inj + "</span>" : ""}</div>`;
+  $("#saleform").style.display = "block";
+  $("#price").value = ""; $("#msg").textContent = "";
+  renderCall(p);
+  stagedId = p.id;
+  document.querySelectorAll(".row.staged").forEach((r) =>
+    r.classList.remove("staged"));
+  const br = document.querySelector(`.row[data-id="${p.id}"]`);
+  if (br) br.classList.add("staged");
+  renderOwnerGrid(); updateSummary();
+  $("#price").focus();
+}
+
+/* the call: deterministic advisor (ported; plan-fit inputs land in M4) */
+function advise(p) {
+  const inf = inflation();
+  const deal = dealOf(p);
+  const est = (doc.market && p.y_avg != null)
+    ? Math.max(1, Math.round(p.y_avg * mScale * inf.ratio)) : null;
+  const val = p.usd != null ? Math.round(p.usd) : 1;
+  const myMax = oStates().find((o) => o.is_me).max;
+  const reasons = [];
+
+  let comparable = null, drop = null;
+  if (POSITIONS.includes(p.pos) && p.usd != null) {
+    const peers = P.filter((x) => x.pos === p.pos && !soldSet.has(x.id)
+      && x.id !== p.id && x.usd != null);
+    comparable = peers.filter((x) => x.usd >= p.usd - 5).length;
+    const below = peers.filter((x) => x.usd < p.usd - 5)
+      .sort((a, b) => b.usd - a.usd)[0];
+    drop = below ? Math.round(p.usd - below.usd) : null;
+  }
+  const needs = ownerNeedMap();
+  const contest = oStates().filter((o) => !o.is_me
+    && o.max > Math.max(est || 2, 2)
+    && (needs[o.id][p.pos] > 0
+      || (["RB", "WR", "TE"].includes(p.pos) && needs[o.id].FLX > 0))).length;
+
+  let cls, label, max;
+  if (p.pos === "K" || p.pos === "DEF") {
+    cls = "bench"; label = "$1 RULE"; max = 1;
+    reasons.push("kickers and defenses are $1 players; never bid $2");
+  } else {
+    const cliffPressure = comparable != null && comparable <= 2 && contest >= 2
+      && (drop == null || drop >= 8);
+    if (deal != null && deal <= -4 && !cliffPressure) {
+      cls = "pass"; label = "LET HIM GO"; max = val;
+    } else if (cliffPressure) {
+      cls = "last"; label = "LAST CHANCE"; max = val;
+      reasons.push(`only ${comparable} comparable ${p.pos}s left`
+        + (drop != null ? ` before a $${drop} drop` : "")
+        + ` and ${contest} funded owners still need one; paying full value is correct here`);
+    } else if (deal != null && deal >= 2) {
+      cls = "target"; label = "TARGET"; max = val;
+    } else {
+      cls = "value"; label = "FAIR VALUE"; max = val;
+    }
+    if (comparable != null && !cliffPressure) {
+      reasons.push(`${comparable} comparable ${p.pos}s left, `
+        + `${contest} funded owner${contest === 1 ? "" : "s"} fighting for them`);
+    }
+  }
+  if (inf.ratio > 1.1) {
+    reasons.push(`money-rich room (x${inf.ratio.toFixed(2)}): expect ~${Math.round((inf.ratio - 1) * 100)}% overpays`);
+  } else if (inf.ratio < 0.9) {
+    reasons.push(`money drying up (x${inf.ratio.toFixed(2)}): patience is being paid`);
+  }
+  if (p.inj) reasons.push("injury status: " + p.inj);
+  return { cls, label, max: Math.max(1, Math.min(max, myMax)), est, reasons };
+}
+
+function renderCall(p) {
+  const a = advise(p);
+  $("#call").style.display = "block";
+  $("#call").innerHTML = `<span class="cverdict ${a.cls}">${a.label}</span>
+    <div class="cmax" title="the break-even ceiling from our value model - past this you provably overpaid.">worth up to <b>$${a.max}</b>${a.est ? ` <span>room likely pays ~$${a.est}</span>` : ""}</div>
+    <ul>${a.reasons.slice(0, 5).map((r) => `<li>${r}</li>`).join("")}</ul>`;
+}
+
+function selectOwner(oid) {
+  selOwner = oid;
+  renderOwnerGrid(); updateSummary();
+  $("#sold").focus();
+}
+
+function updateSummary() {
+  const ready = picked && selOwner != null
+    && parseInt($("#price").value, 10) >= 1;
+  $("#sold").disabled = !ready;
+  if (picked && selOwner != null) {
+    const o = owners()[selOwner];
+    const pr = parseInt($("#price").value, 10);
+    $("#summary").style.display = "block";
+    $("#summary").innerHTML = `<b>${picked.name}</b> to <b>${o.name}</b> for <span class="g">${pr >= 1 ? fmt$(pr) : "$?"}</span>`;
+  } else {
+    $("#summary").style.display = "none";
+  }
+}
+
+function resetSale() {
+  picked = null; selOwner = null; hitList = []; hitSel = 0;
+  stagedId = null;
+  document.querySelectorAll(".row.staged").forEach((r) =>
+    r.classList.remove("staged"));
+  const ids = ["#picked", "#saleform", "#call", "#summary"];
+  ids.forEach((i) => { const n = $(i); if (n) n.style.display = "none"; });
+  if ($("#hits")) $("#hits").innerHTML = "";
+  if ($("#q")) { $("#q").value = ""; $("#q").focus(); }
+  if ($("#msg")) $("#msg").textContent = "";
+}
+
+async function commit() {
+  if (!picked || selOwner == null) return;
+  const price = parseInt($("#price").value, 10);
+  if (!price || price < 1) {
+    $("#msg").textContent = "enter a price of $1 or more";
+    $("#price").focus(); return;
+  }
+  const p = picked, ow = selOwner;
+  appendSale(doc, { pid: p.id, name: p.name, pos: p.pos, owner: ow, price });
+  if (!p.kd && (p.usd || 0) < 2) freeExpanded[p.pos] = true;
+  await saveDoc(doc);
+  stampShow("SOLD", `${p.name} ${fmt$(price)} to ${owners()[ow].name}`);
+  resetSale();
+  refreshRoom();
+  $("#q").focus();
+}
+
+async function undoLast() {
+  const last = curSales[curSales.length - 1];
+  if (!last) return;
+  appendUnsale(doc, last.seq);
+  await saveDoc(doc);
+  stampShow("UNDONE", `${last.name} back on the board`);
+  refreshRoom();
+}
+
+/* ---------------- modal (ported, minus profile layer for now) ------- */
+
+function openModal(pid) {
+  const p = byId[pid], sale = soldBy[pid];
+  const rows = [
+    ["tier", p.tier != null ? p.tier : "-"],
+    ["our value", p.usd != null ? fmt$(p.usd) : "$1", "g"],
+    ["status", (p.inj || "healthy") + (p.rookie ? " / rookie" : "")],
+  ];
+  const d = dealOf(p);
+  if (d != null) rows.push(["deal", (d > 0 ? "+" : "") + Math.round(d)]);
+  if (sale) {
+    rows.unshift(["SOLD",
+      fmt$(sale.price) + " to " + owners()[sale.owner].name, "g"]);
+  }
+  $("#modal").innerHTML = `<h3>${p.name}</h3><div class="sub">${p.pos} &middot; ${p.team || ""}</div>
+    <table id="mtable">${rows.map((r) => `<tr><td>${r[0]}</td><td class="${r[2] || ""}">${r[1]}</td></tr>`).join("")}</table>
+    ${!sale ? `<button id="msell">RECORD SALE</button>`
+    : `<button id="mrev">REVERSE THIS SALE</button>`}`;
+  $("#ovl").style.display = "flex";
+  const ms = $("#msell");
+  if (ms) ms.onclick = () => { closeModal(); pick(p.id); };
+  const mr = $("#mrev");
+  if (mr) {
+    mr.onclick = async () => {
+      appendUnsale(doc, sale.seq);
+      await saveDoc(doc);
+      closeModal();
+      stampShow("REVERSED", `${p.name} back on the board`);
+      refreshRoom();
+    };
+  }
+}
+function closeModal() {
+  $("#ovl").style.display = "none";
+  if (!picked && $("#q")) $("#q").focus();
+}
+
+/* ---------------- the room shell ---------------- */
+
+function renderBoardScreen() {
   const root = $("#main");
   root.innerHTML = "";
-  const run = doc.runs[doc.runs.length - 1];
-  const sales = activeSales(doc.journal);
-  const soldMap = new Map(sales.map((s) => [s.pid, s]));
+  buildModel();
 
   const bar = el("div", "topbar");
-  const spend = $("#spendline");
-  const chip = (text, tip) => {
-    const c = el("span", "chip", text);
-    if (tip) c.dataset.tip = tip;
-    bar.appendChild(c);
-    return c;
-  };
-  if (run) {
-    chip(run.source_label === "blend"
-      ? `run ${run.run_id}: blend of ${run.as_of}`
-      : `run ${run.run_id}: ${run.as_of}`,
-    "Every dollar on this board traces to this numbered engine run: " +
-      "which projections it used and when they were fetched. With more " +
-      "than one source, a run is their stat-by-stat blend.");
-    const total = doc.league.teams * doc.league.budget;
-    spend.hidden = false;
-    spend.textContent = `total board spend $${total}`;
-    spend.dataset.tip = `All the money in your auction. $${run.meta.premium} ` +
-      "of it buys value above the $1 floors; the rest is reserved as $1 " +
-      "minimums across every roster spot.";
-    if (sales.length) {
-      const infl = inflationFactor(doc.league, run, sales);
-      chip(`inflation x${infl.toFixed(2)}`,
-        "Money left in the room versus board value left on it. Above 1.00 " +
-        "the room is money-rich and prices run hot; The Call already " +
-        "folds this in.");
-      const spots = rosterSpots(doc.league.full_roster);
-      chip(`sold ${sales.length}/${doc.league.teams * spots}`,
-        "Players drafted so far, out of every roster spot in the league.");
-      const last = sales[sales.length - 1];
-      chip(`last: ${last.name} $${last.price} ` +
-        `(${doc.league.team_names[last.owner] ?? "?"})`,
-      "The most recent recorded sale, read back from the journal.");
+  if (curRun) {
+    const runChip = el("div", "chip");
+    runChip.innerHTML = `<span class="lab">values from</span>
+      <b>${curRun.source_label === "blend" ? "blend" : curRun.as_of}</b>`;
+    runChip.title = "which saved run all board values come from. "
+      + (curRun.source_label === "blend" ? curRun.as_of : "");
+    bar.appendChild(runChip);
+    for (const id of ["infl", "soldct", "heat", "lastchip"]) {
+      const c = el("div", "chip"); c.id = id; bar.appendChild(c);
     }
-  } else {
-    spend.hidden = true;
   }
-
-  let scale = null, marketValues = null;
-  if (run && doc.market && Object.keys(doc.market.values).length) {
-    marketValues = doc.market.values;
-    scale = marketScale(run.players, marketValues,
-      doc.league.teams * doc.league.model_params.dollar_slots_per_team);
-    chip(`market: ${doc.market.label}@${doc.market.as_of} x${scale.toFixed(2)}`,
-      "Pasted market prices, rescaled by this factor so their money " +
-      "supply matches your league's before comparing.");
-  }
-
-  const spacer = el("span", "spacer");
-  bar.appendChild(spacer);
-  const add = el("button", "ghost", "Add Source");
+  bar.appendChild(el("span", "spacer"));
+  const add = el("button", null, "ADD SOURCE");
   add.onclick = () => { importState = { kind: "values" }; renderImport(); };
   bar.appendChild(add);
-  const reset = el("button", "ghost danger", "Reset");
+  const undo = el("button", "danger", "UNDO LAST");
+  undo.title = "remove the last recorded sale";
+  undo.onclick = undoLast;
+  bar.appendChild(undo);
+  const reset = el("button", "danger", "RESET");
   reset.onclick = async () => {
     if (!confirm("Delete all local Liquid Sheets data? Export a backup first."))
       return;
-    await wipeDoc(); doc = null; stagedPid = null;
+    await wipeDoc(); doc = null; resetSale();
     wizardState.step = 0; renderWizard();
   };
   bar.appendChild(reset);
   root.appendChild(bar);
 
-  if (!run) {
+  if (!curRun) {
     const empty = el("div", "empty");
     empty.appendChild(el("p", null,
       "No projections yet. Fetch to populate the board."));
     const btn = el("button", "primary", "Fetch projections");
     btn.onclick = async () => {
       btn.disabled = true;
-      try { await doFetchSleeper(); renderBoard(); }
+      try { await doFetchSleeper(); renderBoardScreen(); }
       catch (e) { btn.textContent = `Failed: ${e.message}`; }
     };
     empty.appendChild(btn);
@@ -661,335 +1160,121 @@ function renderBoard() {
   }
 
   const layout = el("div", "layout");
-  layout.appendChild(buildCols(run, soldMap, marketValues, scale));
-  layout.appendChild(buildRail(run, sales, soldMap, marketValues, scale));
-  root.appendChild(layout);
-  if (stagedPid) $("#price")?.focus();
-}
-
-function decorateSold(row, p, sale) {
-  row.classList.add("sold");
-  const surplus = p.dollar - sale.price;
-  const a = Math.min(Math.abs(surplus) / 25, 0.4);
-  row.style.background = surplus >= 0
-    ? `rgba(29, 138, 83, ${a})` : `rgba(163, 59, 46, ${a})`;
-  row.dataset.tip = `${sale.name} to ` +
-    `${doc.league.team_names[sale.owner] ?? "?"} for $${sale.price}. ` +
-    "Click to undo this sale.";
-  row.onclick = async () => {
-    if (!confirm(`Undo the sale of ${sale.name} ($${sale.price})?`)) return;
-    appendUnsale(doc, sale.seq);
-    await saveDoc(doc);
-    renderBoard();
-  };
-}
-
-function buildCols(run, soldMap, marketValues, scale) {
   const boardcol = el("div", "boardcol");
-  const headerRow = (table) => {
-    const h = el("div", "row colhead");
-    h.appendChild(el("span", "nm", "Player"));
-    const pts = el("span", "pts", "Pts");
-    pts.dataset.tip = "Projected season points under YOUR scoring rules, " +
-      "after the injury-availability discount.";
-    h.appendChild(pts);
-    const usd = el("span", "usd", "Our $");
-    usd.dataset.tip = "Auction value: this player's share of the league's " +
-      "money, by points above the positional baseline.";
-    h.appendChild(usd);
-    if (marketValues) {
-      const dl = el("span", "deal", "Deal");
-      dl.dataset.tip = "Our value minus the market price (rescaled to your " +
-        "league's money). Green: the room likely underprices him. Within " +
-        "$2 is noise and stays grey.";
-      h.appendChild(dl);
+  const board = el("div", "cols"); board.id = "board";
+  boardcol.appendChild(board);
+  layout.appendChild(boardcol);
+
+  const rail = el("div"); rail.id = "rail";
+  rail.innerHTML = `
+    <div class="panel">
+      <input id="q" placeholder="/Player" autocomplete="off">
+      <div id="hits"></div>
+      <div id="picked"></div>
+      <div id="call"></div>
+      <div id="saleform">
+        <div class="steplab">price</div>
+        <span style="font-family:var(--mono);color:var(--gold);font-size:17px;font-weight:700">$</span>
+        <input id="price" type="number" min="1" step="1" placeholder="0">
+        <div id="ogrid"></div>
+        <div id="summary"></div>
+        <button id="sold" disabled>DRAFT</button>
+        <div id="msg"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2><select id="rostersel" title="view any team's roster"></select></h2>
+      <div id="roster"></div>
+    </div>
+    <div class="panel">
+      <h2 id="ledgerhead" style="cursor:pointer" title="click to collapse/expand">Owner ledger <span id="ledgerarrow">&#9662;</span></h2>
+      <div id="ledgerbody">
+        <div class="ohead"><span>team</span><span>left</span><span>max bid</span><span>open</span></div>
+        <div id="ownerbody"></div>
+      </div>
+    </div>`;
+  layout.appendChild(rail);
+  root.appendChild(layout);
+
+  $("#q").addEventListener("input", () => {
+    hitList = search($("#q").value); hitSel = 0; renderHits();
+  });
+  $("#q").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { hitSel = Math.min(hitSel + 1,
+      hitList.length - 1); renderHits(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { hitSel = Math.max(hitSel - 1, 0);
+      renderHits(); e.preventDefault(); }
+    else if (e.key === "Enter" && hitList[hitSel]) {
+      pick(hitList[hitSel].id); e.preventDefault(); }
+  });
+  $("#price").addEventListener("input", updateSummary);
+  $("#price").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!$("#sold").disabled) { commit(); return; }
+      const b = document.querySelector(".obtn"); if (b) b.focus();
     }
-    table.appendChild(h);
+  });
+  $("#sold").onclick = commit;
+  $("#rostersel").onchange = () => {
+    rosterView = parseInt($("#rostersel").value, 10); renderRoster();
   };
-  const cols = el("div", "cols");
-  for (const pos of POSITIONS) {
-    const col = el("div", "col");
-    col.appendChild(el("h3", `pos-${pos.toLowerCase()}`, pos));
-    const table = el("div", "rows");
-    headerRow(table);
-    const group = run.players.filter((p) => p.pos === pos)
-      .sort((a, b) => b.dollar - a.dollar).slice(0, 40);
-    const baseRank = run.meta.baselines[pos];
-    for (let i = 0; i < group.length; i++) {
-      const p = group[i];
-      const rank = i + 1;
-      if (rank === baseRank + 1) {
-        const b = el("div", "baserow");
-        b.appendChild(el("span", "darr"));
-        b.appendChild(el("span", null, "FREE"));
-        b.appendChild(el("span", "darr"));
-        b.dataset.tip = "Replacement level: everyone below this line " +
-          "should cost $1. Value is measured as points above it.";
-        table.appendChild(b);
-        if (!freeExpanded[pos]) {
-          const more = el("div", "morerow",
-            `+${group.length - baseRank} more..`);
-          more.onclick = () => { freeExpanded[pos] = true; renderBoard(); };
-          table.appendChild(more);
-          break;
-        }
-      }
-      if (i > 0 && p.tier !== group[i - 1].tier && rank <= baseRank) {
-        table.appendChild(el("div", "cutrow", `TIER ${p.tier}`));
-      }
-      const row = el("div", "row");
-      row.appendChild(el("span", "nm", doc.names[p.player_id] ?? p.player_id));
-      const sale = soldMap.get(p.player_id);
-      row.appendChild(el("span", "pts",
-        sale ? `@${sale.price}` : p.proj_pts.toFixed(0)));
-      row.appendChild(el("span", "usd", `$${p.dollar.toFixed(0)}`));
-      if (marketValues) {
-        const mv = marketValues[p.player_id];
-        if (mv == null) row.appendChild(el("span", "deal", ""));
-        else {
-          const d = p.dollar - mv * scale;
-          const cls = Math.abs(d) <= 2 ? "deal dzero"
-            : d > 0 ? "deal dpos" : "deal dneg";
-          row.appendChild(el("span", cls,
-            `${d > 0 ? "+" : ""}${d.toFixed(0)}`));
-        }
-      }
-      if (sale) decorateSold(row, p, sale);
-      if (p.player_id === stagedPid) row.classList.add("staged");
-      table.appendChild(row);
-    }
-    if (freeExpanded[pos] && group.length > baseRank) {
-      const less = el("div", "morerow", "show less");
-      less.onclick = () => { freeExpanded[pos] = false; renderBoard(); };
-      table.appendChild(less);
-    }
-    col.appendChild(table);
-    cols.appendChild(col);
-  }
-  if (doc.kdef && doc.kdef.players.length) {
-    const col = el("div", "col");
-    col.appendChild(el("h3", "pos-kdef", "K / DEF"));
-    const table = el("div", "rows");
-    for (const sub of ["K", "DEF"]) {
-      table.appendChild(el("div", "row subhead", sub === "K"
-        ? "Kickers" : "Defenses"));
-      for (const p of doc.kdef.players.filter((x) => x.pos === sub)
-        .slice(0, 14)) {
-        const row = el("div", "row");
-        row.appendChild(el("span", "nm",
-          doc.names[p.player_id] ?? p.player_id));
-        const sale = soldMap.get(p.player_id);
-        row.appendChild(el("span", "pts",
-          sale ? `@${sale.price}` : p.pts.toFixed(0)));
-        row.appendChild(el("span", "usd", "$1"));
-        if (sale) decorateSold(row, { dollar: 1 }, sale);
-        if (p.player_id === stagedPid) row.classList.add("staged");
-        table.appendChild(row);
-      }
-    }
-    col.appendChild(table);
-    cols.appendChild(col);
-  }
-  boardcol.appendChild(cols);
-  return boardcol;
+  $("#ledgerhead").onclick = () => {
+    const open = $("#ledgerbody").style.display !== "none";
+    $("#ledgerbody").style.display = open ? "none" : "block";
+    $("#ledgerarrow").innerHTML = open ? "&#9656;" : "&#9662;";
+  };
+
+  renderBoard(); renderOwners(); renderRoster(); renderChips();
 }
 
-function buildRail(run, sales, soldMap, marketValues, scale) {
-  const rail = el("div", "rail");
-
-  // ------------------------------------------------------------- sale box
-  const saleBox = el("div", "panelbox");
-  saleBox.appendChild(el("h4", null, "Nomination"));
-  const q = el("input");
-  q.id = "q"; q.placeholder = "/ Type a player name";
-  q.autocomplete = "off";
-  saleBox.appendChild(q);
-  const qres = el("div", "qres");
-  saleBox.appendChild(qres);
-  const pool = searchPool(run);
-  const runSearch = () => {
-    qres.innerHTML = "";
-    const term = q.value.trim().toLowerCase();
-    if (term.length < 2) return;
-    const hits = pool.filter((p) => !soldMap.has(p.pid) &&
-      p.name.toLowerCase().includes(term)).slice(0, 8);
-    for (const h of hits) {
-      const b = el("button", "qitem",
-        `${h.name} (${h.pos}) $${h.dollar.toFixed(0)}`);
-      b.onclick = () => { stagedPid = h.pid; renderBoard(); };
-      qres.appendChild(b);
-    }
-  };
-  q.oninput = runSearch;
-  q.onkeydown = (ev) => {
-    if (ev.key === "Enter") {
-      const first = qres.querySelector("button");
-      if (first) first.click();
-    }
-  };
-
-  const staged = stagedPid ? pool.find((p) => p.pid === stagedPid) : null;
-  if (staged) {
-    const runP = run.players.find((p) => p.player_id === stagedPid) ??
-      { player_id: stagedPid, pos: staged.pos, dollar: 1, proj_pts: 0,
-        tier: 99 };
-    const card = el("div", "stagecard");
-    const top = el("div", "stagetop");
-    const posCls = staged.pos === "K" || staged.pos === "DEF"
-      ? "kdef" : staged.pos.toLowerCase();
-    top.appendChild(el("span", `stagepos pos-${posCls}`, staged.pos));
-    top.appendChild(el("span", "stagename", staged.name));
-    const clear = el("button", "ghost tiny", "x");
-    clear.onclick = () => { stagedPid = null; renderBoard(); };
-    top.appendChild(clear);
-    card.appendChild(top);
-
-    const call = theCall({ league: doc.league, run, player: runP, sales,
-      marketValues, scale });
-    const v = el("div", "verdict", call.verdict);
-    card.appendChild(v);
-    const bid = el("div", "bidto", `bid to $${call.bidTo}`);
-    bid.dataset.tip = `Board value $${runP.dollar.toFixed(0)}, adjusted ` +
-      `x${call.inflation.toFixed(2)} for live inflation = ` +
-      `$${call.adjusted.toFixed(0)}, capped by your max bid ` +
-      `($${call.myMax}).`;
-    card.appendChild(bid);
-    for (const b of call.badges) card.appendChild(el("div", "badge", b));
-    if (call.verdict !== "DOLLAR ONLY") {
-      card.appendChild(el("div", "badge dim",
-        `${call.contenders} other owner${call.contenders === 1 ? "" : "s"} ` +
-        `can reach $${Math.round(call.adjusted)}`));
-    }
-
-    const form = el("div", "saleform");
-    const price = el("input");
-    price.id = "price"; price.type = "number"; price.min = 1;
-    price.placeholder = "$";
-    form.appendChild(price);
-    const ownersel = el("select");
-    ownersel.id = "ownersel";
-    const ph = el("option", null, "owner...");
-    ph.value = ""; ownersel.appendChild(ph);
-    doc.league.team_names.forEach((n, i) => {
-      const o = el("option", null, n);
-      o.value = String(i);
-      ownersel.appendChild(o);
-    });
-    form.appendChild(ownersel);
-    const draftBtn = el("button", "primary", "DRAFT");
-    form.appendChild(draftBtn);
-    card.appendChild(form);
-    const msg = el("p", "msg");
-    msg.id = "salemsg";
-    card.appendChild(msg);
-
-    const commit = async () => {
-      const pr = Number(price.value);
-      const ow = ownersel.value === "" ? null : Number(ownersel.value);
-      if (!pr || pr < 1) { msg.textContent = "Enter the winning price."; return; }
-      if (ow === null) { msg.textContent = "Pick the winning owner."; return; }
-      appendSale(doc, { pid: staged.pid, name: staged.name, pos: staged.pos,
-        owner: ow, price: pr });
-      const group = run.players.filter((p) => p.pos === staged.pos)
-        .sort((a, b) => b.dollar - a.dollar);
-      const rank = group.findIndex((p) => p.player_id === staged.pid) + 1;
-      if (rank > (run.meta.baselines[staged.pos] ?? Infinity)) {
-        freeExpanded[staged.pos] = true;
-      }
-      stagedPid = null;
-      await saveDoc(doc);
-      renderBoard();
-      $("#q")?.focus();
-    };
-    draftBtn.onclick = commit;
-    price.onkeydown = (ev) => {
-      if (ev.key === "Enter") {
-        if (ownersel.value === "") ownersel.focus();
-        else commit();
-      }
-    };
-    ownersel.onkeydown = (ev) => { if (ev.key === "Enter") commit(); };
-    saleBox.appendChild(card);
-  } else {
-    saleBox.appendChild(el("p", "hint",
-      "When a player is nominated, type his name and stage him. The Call " +
-      "answers with a verdict and a max bid."));
+/* re-render everything after a state change, preserving staged state */
+function refreshRoom() {
+  const keepPicked = picked, keepOwner = selOwner;
+  renderBoardScreen();
+  if (keepPicked && !soldSet.has(keepPicked.id)) {
+    pick(keepPicked.id);
+    if (keepOwner != null) selectOwner(keepOwner);
   }
-  if (sales.length) {
-    const undo = el("button", "ghost tiny", "Undo last sale");
-    undo.onclick = async () => {
-      const last = sales[sales.length - 1];
-      if (!confirm(`Undo ${last.name} $${last.price}?`)) return;
-      appendUnsale(doc, last.seq);
-      await saveDoc(doc);
-      renderBoard();
-    };
-    saleBox.appendChild(undo);
-  }
-  rail.appendChild(saleBox);
-
-  // -------------------------------------------------------------- ledger
-  const ledger = el("div", "panelbox");
-  ledger.appendChild(el("h4", null, "Ledger"));
-  const owners = ownerStates(doc.league, sales);
-  const lh = el("div", "ledrow ledhead");
-  lh.appendChild(el("span", "lname", "team"));
-  const lmax = el("span", "lnum", "max");
-  lmax.dataset.tip = "The most this team can bid on one player and still " +
-    "fill every remaining spot at $1.";
-  lh.appendChild(lmax);
-  lh.appendChild(el("span", "lnum", "left"));
-  lh.appendChild(el("span", "lnum", "spots"));
-  ledger.appendChild(lh);
-  owners.forEach((o) => {
-    const r = el("div", o.idx === 0 ? "ledrow me" : "ledrow");
-    const nm = el("span", "lname click", o.name);
-    nm.onclick = () => { rosterView = o.idx; renderBoard(); };
-    r.appendChild(nm);
-    r.appendChild(el("span", "lnum", `$${o.maxBid}`));
-    r.appendChild(el("span", "lnum", `$${o.remaining}`));
-    r.appendChild(el("span", "lnum", String(o.spotsLeft)));
-    ledger.appendChild(r);
-  });
-  rail.appendChild(ledger);
-
-  // -------------------------------------------------------------- roster
-  const rosterBox = el("div", "panelbox");
-  const rsel = el("select");
-  doc.league.team_names.forEach((n, i) => {
-    const o = el("option", null, i === 0 ? `${n} (you)` : n);
-    o.value = String(i);
-    if (i === rosterView) o.selected = true;
-    rsel.appendChild(o);
-  });
-  rsel.onchange = () => { rosterView = Number(rsel.value); renderBoard(); };
-  const rh = el("h4", null, "Roster");
-  rosterBox.appendChild(rh);
-  rosterBox.appendChild(rsel);
-  const mySales = sales.filter((s) => s.owner === rosterView);
-  if (!mySales.length) {
-    rosterBox.appendChild(el("p", "hint", "No players yet."));
-  }
-  for (const s of mySales) {
-    const r = el("div", "rostrow");
-    r.appendChild(el("span", "lname", `${s.name} (${s.pos})`));
-    r.appendChild(el("span", "lnum", `$${s.price}`));
-    const x = el("button", "ghost tiny", "x");
-    x.dataset.tip = "Undo this sale";
-    x.onclick = async () => {
-      if (!confirm(`Undo ${s.name} $${s.price}?`)) return;
-      appendUnsale(doc, s.seq);
-      await saveDoc(doc);
-      renderBoard();
-    };
-    r.appendChild(x);
-    rosterBox.appendChild(r);
-  }
-  rail.appendChild(rosterBox);
-  return rail;
 }
 
-/* ---------------------------------------------------------------- boot */
+const renderBoard_screen_alias = renderBoardScreen;
+
+/* ---------------- keys (ported) ---------------- */
+
+const OKEYS = { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6,
+  "8": 7, "9": 8, "0": 9, "-": 10, "=": 11 };
+
+document.addEventListener("keydown", (e) => {
+  if (!doc || !doc.league || !curRun || !$("#q")) return;
+  const a = document.activeElement;
+  const inInput = a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA"
+    || a.tagName === "SELECT");
+  if (e.key === "/" && !inInput) { $("#q").focus(); e.preventDefault(); return; }
+  if (e.key === "Escape") { resetSale(); closeModal(); return; }
+  if (!inInput && !picked && e.key.length === 1 && /[a-z]/i.test(e.key)
+    && !e.metaKey && !e.ctrlKey && !e.altKey) { $("#q").focus(); return; }
+  if (picked && !inInput && e.key in OKEYS) {
+    const btns = document.querySelectorAll(".obtn");
+    const b = btns[OKEYS[e.key]];
+    if (b) { selectOwner(+b.dataset.oid); e.preventDefault(); return; }
+  }
+  if (picked && !inInput && e.key === "Enter" && !$("#sold").disabled
+    && !(a && a.className && String(a.className).includes("obtn"))) {
+    commit(); e.preventDefault(); return;
+  }
+  if (a && a.className && String(a.className).includes("obtn")) {
+    const btns = [...document.querySelectorAll(".obtn")];
+    const i = btns.indexOf(a);
+    const moves = { ArrowDown: 2, ArrowUp: -2, ArrowRight: 1, ArrowLeft: -1 };
+    if (e.key in moves && btns[i + moves[e.key]]) {
+      btns[i + moves[e.key]].focus(); e.preventDefault();
+    }
+  }
+});
+$("#ovl").onclick = (e) => { if (e.target.id === "ovl") closeModal(); };
+
+/* ---------------- boot ---------------- */
 
 async function boot() {
   doc = await loadDoc();
@@ -998,7 +1283,7 @@ async function boot() {
     if (!importInput.files.length) return;
     try {
       doc = await importDocFile(importInput.files[0]);
-      doc.league ? renderBoard() : renderWizard();
+      doc.league ? renderBoardScreen() : renderWizard();
     } catch (e) { alert(e.message); }
   };
   const menu = $("#gearmenu");
@@ -1018,10 +1303,10 @@ async function boot() {
   $("#menuSleeper").onclick = async () => {
     menu.hidden = true;
     if (!doc || !doc.league) { alert("Finish setup first."); return; }
-    try { await doFetchSleeper(); renderBoard(); }
+    try { await doFetchSleeper(); renderBoardScreen(); }
     catch (e) { alert(`Fetch failed (${e.message}). Are you offline?`); }
   };
-  if (doc && doc.league) renderBoard();
+  if (doc && doc.league) renderBoardScreen();
   else renderWizard();
 }
 
