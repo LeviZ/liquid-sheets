@@ -43,3 +43,14 @@ github.com/LeviZ/fantasy-football).
 5. **Never modify the upstream** from this workstream. levi-sheet/ is
    read-only reference material; even fixing an obvious upstream bug is a
    proposal to make in an upstream session, not an edit from here.
+
+## Documentation system
+
+This repo follows the upstream's documentation taxonomy, defined in
+claude-projects/fantasy-football/DOCUMENTATION.md (private repo): decisions
+get ADRs (docs/adr/ here, MADR format), operational lessons go in runbooks,
+scope and data contracts live in CHARTER.md / PRODUCT-SCOPE.md /
+DATA-IN-SPEC.md, every phase appends LEARNINGS to MASTER-PLAN.md before the
+next phase plan is written, and documentation lands in the same session as
+the change it records. When adding a document type not listed there, propose
+the addition upstream first so the taxonomy stays one system in two repos.
