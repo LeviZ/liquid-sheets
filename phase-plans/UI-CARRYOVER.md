@@ -62,7 +62,7 @@ Parent: [PHASE-4.md](PHASE-4.md). Source of truth being harvested: `levi-sheet/d
 
 ## Round plan
 
-- **M3.2 (next round): the rail becomes the original's rail.** Items 3, 5-15 above: sale flow shape, The Call port, ledger, slot-based roster, keyboard, surplus/stamp/errbar, inflation port. This is the "sidebar should look like the other app" round.
+- **M3.2: LANDED in V11 (2026-08-19).** Items 3, 5-15 ported, plus more than planned: light-set tokens adopted wholesale (item 1's light half), board colhead with sortable usd/deal (item 18's sort half), and the player modal's core (item 16, minus profile layer). Chip micro-viz (item 4) also landed. Screenshot review pending.
 - **M4: tokens first, then everything that styles against them.** Items 1-2, 4, 16-24, plus Bucket B's envelopes, run selector, K/DEF column UI, print view.
 - **Post-draft sweep (after ~Sept 6): diff the frozen original against this table**, harvest V37+ additions, close the plan.
 
